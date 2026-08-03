@@ -88,7 +88,7 @@ sh "$plugin_dir/scripts/install-agents.sh"
 sh "$plugin_dir/scripts/install-agents.sh" --check
 ~~~
 
-Version 0.3.0 recognizes only byte-exact v0.2.0 legacy
+Version 0.3.1 recognizes only byte-exact v0.2.0 legacy
 `sol-advisor-luna-implementer.toml` and `sol-advisor-terra-implementer.toml` files.
 Normal installer mode replaces the exact legacy Terra file with the current Terra /
 High template, removes the exact legacy Luna file, and refuses modified, nonregular,
@@ -162,6 +162,17 @@ The orchestrator inspects every diff and reruns verification. A fresh Sol review
 returns ship, fix-first, or rethink. The session cannot report completion until the
 reviewer returns ship. These remain native Codex subagent threads; Sol Advisor does not
 launch a nested Codex CLI process or globally reroute unrelated subagents.
+
+That review loop is budgeted at three final reviews per deliverable. A fresh reviewer
+can always find something new, so an unbounded fix-first cycle never terminates on its
+own. Cycle 1 fixes the finding set; later cycles judge only those findings and
+regressions introduced by the fixes, and anything else is reported as deferred residual
+risk. The cycle count lives in `${CODEX_HOME:-$HOME/.codex}/tmp/sol-advisor/review-ledger.md`
+so context compaction cannot reset it, and it is never reset by a corrected
+specification, an architecture revision, or a renegotiated scope. When the budget is
+exhausted, a finding survives two consecutive fix cycles, or rethink arrives at cycle 2
+or later, the session stops and hands the unresolved findings and options to the user
+instead of spawning another lane.
 
 ## Local development
 

@@ -104,7 +104,7 @@ for required in "$installer" "$runtime_inspector" "$manifest" "$skill" "$contrac
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.3.0 ] || fail "manifest version is not 0.3.0"
+[ "$(jq -r '.version' "$manifest")" = 0.3.1 ] || fail "manifest version is not 0.3.1"
 pass "manifest JSON and version"
 
 python3 - "$templates" <<'PY'

@@ -124,18 +124,41 @@ VERIFICATION EVIDENCE
 - <command> -> <actual primary-session output evidence>
 - <artifact or diff inspection> -> <actual evidence>
 
+REVIEW CYCLE
+This is review <n> of at most 3 for this deliverable.
+<For cycle 2 or 3 only:> Cycle 1 already defined the complete finding set. Judge only
+(a) whether each open finding listed below is now resolved, and (b) regressions or new
+defects introduced by the fix diffs. Report anything else under DEFERRED. Do not reopen
+settled decisions, restate cycle-1 findings that are now resolved, or broaden scope.
+
+OPEN FINDINGS FROM THE PREVIOUS CYCLE
+- <finding> -> <fix applied> -> <evidence>
+
 REVIEW
 Inspect the actual files and accumulated change set. Judge correctness, completeness,
 regressions, scope discipline, interface preservation, test adequacy, and material risk.
+Reserve `fix-first` for defects that block the stated goal or introduce material risk.
+Style preferences, speculative hardening, and improvements outside the stated goal are
+DEFERRED, not findings.
 
 SOL REVIEW
+CYCLE: <n> of 3
 VERDICT: ship | fix-first | rethink
 REASON: <decisive evidence-based reason>
-FINDINGS: <precise file references and required fixes, or none>
+FINDINGS: <in-scope blocking issues with precise file references, or none>
+DEFERRED: <out-of-scope observations that must not trigger another fix cycle, or none>
 RESIDUAL RISK: <most important remaining risk, or none>
 ~~~
 
-If any fix is made after review, discard the verdict and run a new fresh review.
+If any fix is made after review, discard the verdict and run a new fresh review inside
+the review budget. That budget is at most 3 final reviews per deliverable, tracked in
+`${CODEX_HOME:-$HOME/.codex}/tmp/sol-advisor/review-ledger.md` so it survives context
+compaction, and it is never reset by compaction, a corrected specification, an
+architecture revision, or a renegotiated scope. When the budget is exhausted, a finding
+survives two consecutive fix cycles, or `rethink` arrives at cycle 2 or later, stop the
+loop and hand the unresolved findings and options back to the user instead of spawning
+another lane. See SKILL.md's bounded-review-loop section for the full stop conditions.
+
 Sol reviewing Sol is context-clean, not cross-model-family independence.
 
 Use observed isolation, not requested isolation:

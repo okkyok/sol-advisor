@@ -161,8 +161,10 @@ behaviorally read-only, inspect the actual files and accumulated diff, and retur
 exactly `ship`, `fix-first`, or `rethink`.
 
 - `ship`: report completion with verification evidence.
-- `fix-first`: delegate the required fixes, verify again, and obtain a new review.
-- `rethink`: revise architecture and do not report completion.
+- `fix-first`: delegate the required fixes, verify again, and obtain a new review
+  inside the review budget below.
+- `rethink`: revise architecture and do not report completion. A `rethink` consumes a
+  review cycle like any other verdict.
 
 Never let the reviewer implement its own fixes. A Sol-on-Sol review is context-clean,
 not model-family-independent.
@@ -175,3 +177,51 @@ Apply the observed sandbox policy:
   repository and artifact state. Report the observed sandbox and permission profile.
 - If hard isolation is required, the sandbox is unobservable, or any mutation occurs,
   stop the review. Do not claim read-only isolation or hide the mutation.
+
+## Bound the review loop
+
+The final review is budgeted. Unbounded, `fix-first` -> Terra fix -> fresh review repeats
+until the task is interrupted, because a reviewer with a fresh context can always find
+something new. Termination is the architect's responsibility, not the reviewer's.
+
+Budget: at most 3 final reviews per deliverable, meaning the first review plus at most 2
+re-reviews. Count every final review, including one that follows a `rethink`.
+
+Persist the count outside the conversation. Before each final review, append one line to
+the ledger:
+
+~~~sh
+ledger_dir="${CODEX_HOME:-$HOME/.codex}/tmp/sol-advisor"
+mkdir -p "$ledger_dir"
+printf '%s | %s | cycle %s/3 | %s | %s\n' \
+  "<UTC timestamp>" "<deliverable id>" "<n>" "<verdict, or pending>" "<one-line summary>" \
+  >> "$ledger_dir/review-ledger.md"
+~~~
+
+Read that ledger to recover `n` after context compaction, a session restart, or a
+handoff; never rely on conversation memory for the count.
+
+The budget belongs to the deliverable. Never reset it because context was compacted, the
+specification was corrected, the architecture was revised, or the scope was renegotiated.
+Only an explicit user decision to change the goal starts a new deliverable id, and you
+must say so when it happens.
+
+Freeze the review scope after cycle 1. Cycle 1 defines the complete finding set. Cycles 2
+and 3 judge only:
+
+- whether each cycle-1 finding is now resolved, and
+- regressions or new defects introduced by the fix diffs themselves.
+
+Anything else is recorded as deferred residual risk and reported to the user. It does not
+start another fix cycle. State this restriction in the review packet.
+
+Stop and hand control back to the user instead of spawning another review when:
+
+- the budget is exhausted, meaning cycle 3 returned a verdict other than `ship`;
+- two consecutive reviews return findings the fixes did not resolve, or a fixed finding
+  reappears; or
+- a `rethink` arrives at cycle 2 or later, or a second `rethink` arrives at all.
+
+On a stop condition, do not report the deliverable complete and do not spawn another
+lane. Report the ledger lines, the current diff, the verification evidence, the unresolved
+findings, and the options you see, then ask the user which to take.
