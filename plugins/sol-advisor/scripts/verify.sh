@@ -15,6 +15,8 @@ templates=$plugin_dir/agents
 manifest=$plugin_dir/.codex-plugin/plugin.json
 hooks_file=$plugin_dir/hooks.json
 review_hook=$plugin_dir/hooks/review-budget.py
+data_dir_resolver=$script_dir/resolve-data-dir.sh
+ledger_report=$script_dir/ledger-report.sh
 skill=$plugin_dir/skills/orchestration/SKILL.md
 contracts=$plugin_dir/skills/orchestration/references/role-contracts.md
 preflight=$plugin_dir/skills/orchestration/references/preflight.md
@@ -104,12 +106,12 @@ LEGACY_LUNA
   [ "$(shasum -a 256 "$target/$luna_file" | awk '{print $1}')" = "$legacy_luna_sha256" ] || fail "legacy Luna fixture digest drifted"
 }
 
-for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
+for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$data_dir_resolver" "$ledger_report" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
   test -f "$required" || fail "required file missing: $required"
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.5.4 ] || fail "manifest version is not 0.5.4"
+[ "$(jq -r '.version' "$manifest")" = 0.6.0 ] || fail "manifest version is not 0.6.0"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
@@ -164,7 +166,50 @@ printf '%s\n' "$hook_output" | jq -e '
   .hookSpecificOutput.permissionDecision == "deny"
   and (.hookSpecificOutput.permissionDecisionReason | type == "string" and length > 0)
 ' >/dev/null || fail "fourth review did not produce the required denial"
-[ "$(jq -s 'length' "$hook_ledger")" = 3 ] || fail "denied review changed the ledger"
+jq -s -e '
+  (map(select(.event == "review")) | length) == 3
+  and (map(select(.event == "denied")) | length) == 1
+  and .[-1].cycle == 4
+' "$hook_ledger" >/dev/null || fail "fourth review denial was not recorded exactly"
+
+if ! hook_output=$(run_review_hook "$review_payload"); then fail "fifth review did not exit 0"; fi
+printf '%s\n' "$hook_output" | jq -e '
+  .hookSpecificOutput.permissionDecision == "deny"
+' >/dev/null || fail "fifth review did not produce the required denial"
+jq -s -e '
+  (map(select(.event == "review")) | length) == 3
+  and (map(select(.event == "denied")) | length) == 2
+  and .[-1].cycle == 4
+' "$hook_ledger" >/dev/null || fail "repeated denial inflated the review count"
+pass "review denials are recorded without inflating the review budget"
+
+if ! ledger_output=$(sh "$ledger_report" --data-dir "$hook_data"); then fail "ledger report rejected the budget ledger"; fi
+printf '%s\n' "$ledger_output" | grep -Fq 'Deliverables: 1' || fail "ledger report did not count one deliverable"
+printf '%s\n' "$ledger_output" | grep -Fq '3 cycles=1' || fail "ledger report did not count three used cycles"
+printf '%s\n' "$ledger_output" | grep -Fq 'Deliverables that hit the cap: 1' || fail "ledger report did not count one cap hit"
+printf '%s\n' "$ledger_output" | grep -Fq 'scope freezing is not working' || fail "ledger report omitted the cap-hit verdict"
+
+empty_ledger_data=$tmp_dir/empty-ledger
+mkdir "$empty_ledger_data"
+before=$(snapshot_files "$empty_ledger_data")
+if ! no_ledger_output=$(sh "$ledger_report" --data-dir "$empty_ledger_data"); then fail "missing ledger report did not exit 0"; fi
+after=$(snapshot_files "$empty_ledger_data")
+[ "$before" = "$after" ] || fail "missing ledger report mutated the data directory"
+printf '%s\n' "$no_ledger_output" | grep -Fq "no ledger found at $empty_ledger_data/review-budget.jsonl" || fail "missing ledger report omitted the clean message"
+if sh "$ledger_report" --unknown >/dev/null 2>&1; then fail "ledger report accepted an unknown argument"; else report_status=$?; fi
+[ "$report_status" -eq 2 ] || fail "ledger report unknown argument did not exit 2"
+
+multi_ledger_data=$tmp_dir/multi-ledger
+mkdir "$multi_ledger_data"
+printf '%s\n' \
+  '{"event":"review","session_id":"session-a","cycle":1}' \
+  '{"event":"new-deliverable","session_id":"session-a"}' \
+  '{"event":"review","session_id":"session-a","cycle":1}' \
+  '{"event":"review","session_id":"session-b","cycle":1}' \
+  > "$multi_ledger_data/review-budget.jsonl"
+if ! multi_ledger_output=$(sh "$ledger_report" --data-dir "$multi_ledger_data"); then fail "multi-session ledger report failed"; fi
+printf '%s\n' "$multi_ledger_output" | grep -Fq 'Deliverables: 3' || fail "ledger report did not split deliverables by reset and session"
+pass "ledger reporting, no-ledger handling, and deliverable grouping"
 
 printf '%s\n' '{"event":"new-deliverable","session_id":"budget-session"}' >> "$hook_ledger"
 if ! hook_output=$(run_review_hook "$review_payload"); then fail "new deliverable review did not exit 0"; fi
@@ -191,6 +236,8 @@ pass "review-budget hook filtering, enforcement, reset, and fail-open behavior"
 liveness_data=$tmp_dir/hook-liveness
 liveness_status=$liveness_data/hook-status.json
 if grep -q '<<' "$script_dir/check-hook-trust.sh"; then fail "check-hook-trust.sh uses a here-document, which needs a temp file and fails in a read-only sandbox"; fi
+if grep -q '<<' "$data_dir_resolver"; then fail "resolve-data-dir.sh uses a here-document"; fi
+if grep -q '<<' "$ledger_report"; then fail "ledger-report.sh uses a here-document"; fi
 liveness_payload='{"hook_event_name":"PreToolUse","tool_name":"exec","session_id":"liveness-session","cwd":"/fixture","tool_input":{}}'
 if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "liveness payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "liveness payload produced stdout"
@@ -218,6 +265,31 @@ PY
 [ "$(jq -r '.plugin_version' "$liveness_status")" = "$(jq -r '.version' "$manifest")" ] || fail "heartbeat plugin version does not match manifest"
 if ! active_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_data"); then fail "checker rejected a fresh heartbeat"; fi
 [ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "fresh heartbeat output did not start with HOOK ACTIVE"
+printf '%s\n' "$active_output" | grep -Fq 'unverified because no nonce was supplied' || fail "nonce-free checker did not warn that the result is unverified"
+
+nonce_payload='{"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"liveness-session","cwd":"/fixture","tool_input":{"command":"sh check-hook-trust.sh --data-dir /fixture --nonce abc-123"}}'
+if ! hook_output=$(printf '%s' "$nonce_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "nonce payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "nonce payload produced stdout"
+[ "$(jq -r '.nonce' "$liveness_status")" = abc-123 ] || fail "hook heartbeat did not record the nonce"
+if ! active_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_data" --nonce abc-123); then fail "checker rejected a matching nonce"; fi
+[ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "matching nonce output did not start with HOOK ACTIVE"
+printf '%s\n' "$active_output" | grep -Fq 'produced by this invocation' || fail "matching nonce output omitted invocation proof"
+if inert_output=$(sh "$script_dir/check-hook-trust.sh" --nonce different-1 --data-dir "$liveness_data"); then fail "checker accepted a different nonce"; fi
+[ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "different nonce output did not start with HOOK INERT"
+printf '%s\n' "$inert_output" | grep -Fq 'did not observe this invocation' || fail "different nonce output omitted the mismatch reason"
+if sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_data" --nonce 'bad;token' >/dev/null 2>&1; then fail "checker accepted a nonce containing a semicolon"; else nonce_status=$?; fi
+[ "$nonce_status" -eq 2 ] || fail "invalid nonce did not exit 2"
+if sh "$script_dir/check-hook-trust.sh" --nonce ab >/dev/null 2>&1; then fail "checker accepted a nonce shorter than four characters"; else nonce_status=$?; fi
+[ "$nonce_status" -eq 2 ] || fail "short nonce did not exit 2"
+if sh "$script_dir/check-hook-trust.sh" --nonce >/dev/null 2>&1; then fail "checker accepted --nonce without a value"; else nonce_status=$?; fi
+[ "$nonce_status" -eq 2 ] || fail "missing nonce value did not exit 2"
+if sh "$script_dir/check-hook-trust.sh" --unknown >/dev/null 2>&1; then fail "checker accepted an unknown argument"; else nonce_status=$?; fi
+[ "$nonce_status" -eq 2 ] || fail "checker unknown argument did not exit 2"
+
+if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "second nonce-free payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "second nonce-free payload produced stdout"
+jq -e '(.nonce == null)' "$liveness_status" >/dev/null || fail "nonce-free heartbeat retained a nonce"
+pass "hook nonce capture and invocation-bound liveness checks"
 
 empty_data=$tmp_dir/hook-empty
 mkdir "$empty_data"
@@ -242,10 +314,18 @@ fake_codex_home=$tmp_dir/fake-empty-codex-home
 mkdir -p "$fake_script_dir" "$fake_data" "$fake_codex_home"
 fake_data=$(CDPATH= cd "$fake_data" && pwd)
 cp "$script_dir/check-hook-trust.sh" "$fake_script_dir/check-hook-trust.sh"
+cp "$data_dir_resolver" "$fake_script_dir/resolve-data-dir.sh"
+cp "$ledger_report" "$fake_script_dir/ledger-report.sh"
 cp "$liveness_status" "$fake_data/hook-status.json"
+cp "$hook_ledger" "$fake_data/review-budget.jsonl"
 if ! active_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$fake_codex_home" sh "$fake_script_dir/check-hook-trust.sh"); then fail "checker rejected a derived-path heartbeat"; fi
 [ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "derived-path output did not start with HOOK ACTIVE"
 printf '%s\n' "$active_output" | grep -Fq "$fake_data" || fail "derived-path output did not name the derived data directory"
+if ! derived_ledger_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$fake_codex_home" sh "$fake_script_dir/ledger-report.sh"); then fail "ledger reporter rejected a derived-path ledger"; fi
+checker_resolved=$(printf '%s\n' "$active_output" | sed -n 's/^Resolved data directory: //p')
+report_resolved=$(printf '%s\n' "$derived_ledger_output" | sed -n 's|^Resolved ledger: ||p' | sed 's|/review-budget.jsonl$||')
+[ "$checker_resolved" = "$report_resolved" ] || fail "checker and ledger reporter resolved different data directories"
+pass "shared hook and ledger-report data-directory resolution"
 
 fake_inert_script_dir=$tmp_dir/fake-inert/plugins/cache/mp/plug/9.9.9/scripts
 fake_inert_data=$tmp_dir/fake-inert/plugins/data/mp-plug
@@ -253,6 +333,7 @@ fake_inert_codex_home=$tmp_dir/fake-inert-empty-codex-home
 mkdir -p "$fake_inert_script_dir" "$fake_inert_data" "$fake_inert_codex_home"
 fake_inert_data=$(CDPATH= cd "$fake_inert_data" && pwd)
 cp "$script_dir/check-hook-trust.sh" "$fake_inert_script_dir/check-hook-trust.sh"
+cp "$data_dir_resolver" "$fake_inert_script_dir/resolve-data-dir.sh"
 before=$(snapshot_files "$fake_inert_data")
 if inert_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$fake_inert_codex_home" sh "$fake_inert_script_dir/check-hook-trust.sh"); then fail "checker accepted a missing derived-path heartbeat"; fi
 after=$(snapshot_files "$fake_inert_data")
@@ -464,6 +545,8 @@ pass "preflight three required role names and retired two-lane wording absence"
 sh -n "$installer"
 sh -n "$runtime_inspector"
 sh -n "$script_dir/check-hook-trust.sh"
+sh -n "$data_dir_resolver"
+sh -n "$ledger_report"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 

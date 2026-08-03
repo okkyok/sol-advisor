@@ -219,7 +219,9 @@ re-reviews. Count every final review, including one that follows a `rethink`.
 The plugin's `PreToolUse` hook counts each final-review spawn and denies the fourth at
 the host level. The primary session does not maintain the count. The hook maintains
 `$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
-deliverable has used. Do not hand-edit it.
+deliverable has used. Denials are recorded in the same ledger. The
+`scripts/ledger-report.sh` helper summarizes how the budget is actually being used. Do
+not hand-edit the ledger.
 
 Before the first final review, run the preflight's hook-liveness check at
 `scripts/check-hook-trust.sh`. `HOOK ACTIVE` means the host holds the budget. `HOOK

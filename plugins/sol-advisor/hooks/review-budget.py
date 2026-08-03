@@ -3,6 +3,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import sys
 
@@ -33,8 +34,16 @@ def main():
                 .isoformat()
                 .replace("+00:00", "Z"),
                 "session_id": payload.get("session_id"),
-                "plugin_version": "0.5.4",
+                "plugin_version": "0.6.0",
             }
+            tool_input_text = json.dumps(
+                payload.get("tool_input"), separators=(",", ":"), ensure_ascii=False
+            )
+            nonce_match = re.search(
+                r"--nonce[ =]+([A-Za-z0-9_.:-]{4,64})", tool_input_text
+            )
+            if nonce_match:
+                heartbeat["nonce"] = nonce_match.group(1)
             heartbeat_temp.write_text(
                 json.dumps(heartbeat, separators=(",", ":")) + "\n",
                 encoding="utf-8",
@@ -110,6 +119,25 @@ def main():
                     "command, which is recorded and auditable: "
                     f"{reset_command}"
                 )
+                try:
+                    ledger.seek(0, os.SEEK_END)
+                    if contents and not contents.endswith(("\n", "\r")):
+                        ledger.write("\n")
+                    denied_record = {
+                        "ts": datetime.datetime.now(datetime.timezone.utc)
+                        .isoformat()
+                        .replace("+00:00", "Z"),
+                        "event": "denied",
+                        "session_id": session_id,
+                        "cwd": payload.get("cwd", ""),
+                        "cycle": count + 1,
+                    }
+                    ledger.write(
+                        json.dumps(denied_record, separators=(",", ":")) + "\n"
+                    )
+                    ledger.flush()
+                except BaseException:
+                    pass
                 print(
                     json.dumps(
                         {

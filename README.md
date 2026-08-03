@@ -190,8 +190,12 @@ trust is granted.
 
 The hook writes a liveness heartbeat to `$PLUGIN_DATA/hook-status.json` on every
 `PreToolUse` event. `scripts/check-hook-trust.sh` reads it and reports `HOOK ACTIVE` or
-`HOOK INERT`. The check is self-validating because `PreToolUse` fires before the checker,
-itself a shell command, runs, so its own invocation produces the heartbeat it reads. The
+`HOOK INERT`. Pass a nonce with `--nonce "$$-$(date +%s)"`; the hook copies that nonce
+from the checker command into the heartbeat, proving that the heartbeat came from that
+invocation rather than from a concurrent trusted session. A check without a nonce is
+reported as unverified. Denied fourth and later reviews are now recorded in the ledger
+without increasing the review count. Run `scripts/ledger-report.sh` to summarize cycles,
+cap hits, resets, and whether the ledger suggests the review scope is still growing. The
 hook deliberately has no `matcher` in `hooks.json`: narrowing it would hide the heartbeat
 from ordinary tool calls and destroy the liveness check.
 
