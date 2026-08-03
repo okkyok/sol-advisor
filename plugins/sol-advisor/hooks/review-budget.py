@@ -33,7 +33,7 @@ def main():
                 .isoformat()
                 .replace("+00:00", "Z"),
                 "session_id": payload.get("session_id"),
-                "plugin_version": "0.5.3",
+                "plugin_version": "0.5.4",
             }
             heartbeat_temp.write_text(
                 json.dumps(heartbeat, separators=(",", ":")) + "\n",

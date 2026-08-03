@@ -89,8 +89,7 @@ if [ ! -r "$status_file" ]; then
   exit 1
 fi
 
-python3 - "$status_file" "$data_dir" "$checked_count" "$@" <<'PY'
-import datetime
+python3 -c 'import datetime
 import json
 from pathlib import Path
 import sys
@@ -107,9 +106,9 @@ def inert_common():
         print("Checked candidate data directories:")
         for candidate in checked_candidates:
             print(f"  {candidate}")
-    print("The review budget is therefore NOT enforced; only the architect's discipline bounds the review loop.")
+    print("The review budget is therefore NOT enforced; nothing but your own discipline bounds the review loop.")
     print("The cause is almost always ungranted hook trust.")
-    print("Approve the plugin's hooks in the interactive Codex UI and start a fresh task.")
+    print("Approve this plugin at the interactive Codex hook-trust prompt, then start a fresh task.")
 
 
 try:
@@ -136,7 +135,7 @@ if age > 60:
     print("HOOK INERT")
     print(f"Resolved data directory: {data_dir}")
     print(f"A stale hook heartbeat was found: {timestamp}")
-    print("The hook did not fire for this invocation, so the plugin's hooks are not running in this session.")
+    print("The hook did not fire for this invocation, so no hook is running in this session.")
     inert_common()
     raise SystemExit(1)
 
@@ -145,5 +144,4 @@ print(f"Resolved data directory: {data_dir}")
 print(f"Heartbeat timestamp: {timestamp}")
 print(f"Session id: {session_id}")
 print(f"Plugin version: {plugin_version}")
-print("Confirm that the session id above is the id of the session running this check.")
-PY
+print("Confirm that the session id above is the id of the session running this check.")' "$status_file" "$data_dir" "$checked_count" "$@"

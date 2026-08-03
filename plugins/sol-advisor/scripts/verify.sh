@@ -109,7 +109,7 @@ for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.5.3 ] || fail "manifest version is not 0.5.3"
+[ "$(jq -r '.version' "$manifest")" = 0.5.4 ] || fail "manifest version is not 0.5.4"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
@@ -190,6 +190,7 @@ pass "review-budget hook filtering, enforcement, reset, and fail-open behavior"
 
 liveness_data=$tmp_dir/hook-liveness
 liveness_status=$liveness_data/hook-status.json
+if grep -q '<<' "$script_dir/check-hook-trust.sh"; then fail "check-hook-trust.sh uses a here-document, which needs a temp file and fails in a read-only sandbox"; fi
 liveness_payload='{"hook_event_name":"PreToolUse","tool_name":"exec","session_id":"liveness-session","cwd":"/fixture","tool_input":{}}'
 if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "liveness payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "liveness payload produced stdout"
