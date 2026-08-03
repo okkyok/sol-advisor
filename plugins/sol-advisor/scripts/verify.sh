@@ -109,7 +109,7 @@ for required in "$installer" "$runtime_inspector" "$manifest" "$hooks_file" "$re
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.5.0 ] || fail "manifest version is not 0.5.0"
+[ "$(jq -r '.version' "$manifest")" = 0.5.1 ] || fail "manifest version is not 0.5.1"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
