@@ -1,6 +1,6 @@
 {
   "name": "sol-advisor",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Codex-native architect workflow with role-pinned Terra / High and Luna / Medium implementation lanes and a budgeted, fresh requested-read-only Sol review.",
   "author": {"name": "Daniel McAteer", "url": "https://github.com/DannyMac180"},
   "homepage": "https://github.com/DannyMac180/sol-advisor#readme",
@@ -8,6 +8,7 @@
   "license": "MIT",
   "keywords": ["codex", "orchestration", "multi-agent", "gpt-5.6"],
   "skills": "./skills/",
+  "hooks": "./hooks.json",
   "interface": {
     "displayName": "Sol Advisor",
     "shortDescription": "Architect with Sol, implement with role-pinned Terra / High or the Luna floor lane, and review with Sol.",

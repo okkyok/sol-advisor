@@ -13,6 +13,8 @@ installer=$script_dir/install-agents.sh
 runtime_inspector=$script_dir/inspect-agent-runtime.sh
 templates=$plugin_dir/agents
 manifest=$plugin_dir/.codex-plugin/plugin.json
+hooks_file=$plugin_dir/hooks.json
+review_hook=$plugin_dir/hooks/review-budget.py
 skill=$plugin_dir/skills/orchestration/SKILL.md
 contracts=$plugin_dir/skills/orchestration/references/role-contracts.md
 preflight=$plugin_dir/skills/orchestration/references/preflight.md
@@ -102,13 +104,89 @@ LEGACY_LUNA
   [ "$(shasum -a 256 "$target/$luna_file" | awk '{print $1}')" = "$legacy_luna_sha256" ] || fail "legacy Luna fixture digest drifted"
 }
 
-for required in "$installer" "$runtime_inspector" "$manifest" "$skill" "$contracts" "$preflight" "$readme"; do
+for required in "$installer" "$runtime_inspector" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
   test -f "$required" || fail "required file missing: $required"
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.4.0 ] || fail "manifest version is not 0.4.0"
-pass "manifest JSON and version"
+[ "$(jq -r '.version' "$manifest")" = 0.5.0 ] || fail "manifest version is not 0.5.0"
+[ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
+pass "manifest JSON, version, and hook declaration"
+
+jq empty "$hooks_file"
+jq -e '
+  (keys == ["hooks"])
+  and ((.hooks | keys) == ["PreToolUse"])
+  and (.hooks.PreToolUse | length == 1)
+  and (.hooks.PreToolUse[0].hooks | length == 1)
+  and (.hooks.PreToolUse[0].hooks[0].type == "command")
+  and (.hooks.PreToolUse[0].hooks[0].timeout == 10)
+  and (.hooks.PreToolUse[0].hooks[0].command | contains("CLAUDE_PLUGIN_ROOT"))
+' "$hooks_file" >/dev/null || fail "PreToolUse hook definition is invalid"
+python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$review_hook"
+pass "single PreToolUse hook definition and Python syntax"
+
+hook_data=$tmp_dir/hook-data
+hook_ledger=$hook_data/review-budget.jsonl
+run_review_hook() {
+  printf '%s' "$1" | PLUGIN_DATA="$hook_data" python3 "$review_hook"
+}
+
+exec_payload='{"hook_event_name":"PreToolUse","tool_name":"exec","session_id":"budget-session","cwd":"/fixture","tool_input":{}}'
+if ! hook_output=$(run_review_hook "$exec_payload"); then fail "exec payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "exec payload produced stdout"
+test ! -e "$hook_ledger" || fail "exec payload created the review ledger"
+
+implementer_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_terra_implementer","message":"REVIEW CYCLE"}}'
+if ! hook_output=$(run_review_hook "$implementer_payload"); then fail "implementer payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "implementer payload produced stdout"
+test ! -e "$hook_ledger" || fail "implementer payload created the review ledger"
+
+consult_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Commitment-boundary consult"}}'
+if ! hook_output=$(run_review_hook "$consult_payload"); then fail "consult payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "consult payload produced stdout"
+test ! -e "$hook_ledger" || fail "consult payload created the review ledger"
+
+review_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"REVIEW CYCLE\nThis is a budgeted final review."}}'
+for cycle in 1 2 3; do
+  if ! hook_output=$(run_review_hook "$review_payload"); then fail "review cycle $cycle did not exit 0"; fi
+  [ -z "$hook_output" ] || fail "review cycle $cycle produced stdout"
+done
+jq -s -e '
+  length == 3
+  and (map(.event) == ["review", "review", "review"])
+  and (map(.session_id) == ["budget-session", "budget-session", "budget-session"])
+  and (map(.cycle) == [1, 2, 3])
+' "$hook_ledger" >/dev/null || fail "first three review cycles were not recorded exactly"
+
+if ! hook_output=$(run_review_hook "$review_payload"); then fail "fourth review did not exit 0"; fi
+printf '%s\n' "$hook_output" | jq -e '
+  .hookSpecificOutput.permissionDecision == "deny"
+  and (.hookSpecificOutput.permissionDecisionReason | type == "string" and length > 0)
+' >/dev/null || fail "fourth review did not produce the required denial"
+[ "$(jq -s 'length' "$hook_ledger")" = 3 ] || fail "denied review changed the ledger"
+
+printf '%s\n' '{"event":"new-deliverable","session_id":"budget-session"}' >> "$hook_ledger"
+if ! hook_output=$(run_review_hook "$review_payload"); then fail "new deliverable review did not exit 0"; fi
+[ -z "$hook_output" ] || fail "new deliverable review produced stdout"
+jq -s -e '
+  .[-1].event == "review"
+  and .[-1].session_id == "budget-session"
+  and .[-1].cycle == 1
+' "$hook_ledger" >/dev/null || fail "new deliverable did not restart at cycle 1"
+
+other_session_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"other-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"REVIEW CYCLE\nThis is another session."}}'
+if ! hook_output=$(run_review_hook "$other_session_payload"); then fail "other session review did not exit 0"; fi
+[ -z "$hook_output" ] || fail "other session review produced stdout"
+jq -s -e '
+  .[-1].event == "review"
+  and .[-1].session_id == "other-session"
+  and .[-1].cycle == 1
+' "$hook_ledger" >/dev/null || fail "other session was affected by the exhausted session"
+
+if ! hook_output=$(printf '%s' 'not json at all' | PLUGIN_DATA="$hook_data" python3 "$review_hook"); then fail "malformed input did not exit 0"; fi
+[ -z "$hook_output" ] || fail "malformed input produced stdout"
+pass "review-budget hook filtering, enforcement, reset, and fail-open behavior"
 
 python3 - "$templates" <<'PY'
 from pathlib import Path

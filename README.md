@@ -170,12 +170,23 @@ That review loop is budgeted at three final reviews per deliverable. A fresh rev
 can always find something new, so an unbounded fix-first cycle never terminates on its
 own. Cycle 1 fixes the finding set; later cycles judge only those findings and
 regressions introduced by the fixes, and anything else is reported as deferred residual
-risk. The cycle count lives in `${CODEX_HOME:-$HOME/.codex}/tmp/sol-advisor/review-ledger.md`
-so context compaction cannot reset it, and it is never reset by a corrected
-specification, an architecture revision, or a renegotiated scope. When the budget is
-exhausted, a finding survives two consecutive fix cycles, or rethink arrives at cycle 2
-or later, the session stops and hands the unresolved findings and options to the user
-instead of spawning another lane.
+risk. The cycle count persists outside the conversation so context compaction cannot
+reset it, and it is never reset by a corrected specification, an architecture revision,
+or a renegotiated scope. When the budget is exhausted, a finding survives two consecutive
+fix cycles, or rethink arrives at cycle 2 or later, the session stops and hands the
+unresolved findings and options to the user instead of spawning another lane.
+
+### Machine-enforced review budget
+
+The three-review budget is enforced by a `PreToolUse` hook shipped with the plugin, not
+by convention. The hook counts a spawn only when its agent type is
+`sol_advisor_sol_reviewer` and its prompt contains the literal `REVIEW CYCLE` marker, so
+commitment-boundary consults remain outside the budget. It stores the session-keyed,
+auditable ledger at `$PLUGIN_DATA/review-budget.jsonl`; a new-deliverable record resets
+the count for a genuinely new deliverable in the same session. The hook fails open by
+design, so malformed input or an internal bug can never block a Codex session. Codex asks
+the user to trust a plugin's hooks on first use, and enforcement remains inert until that
+trust is granted.
 
 ### Choosing a lane
 

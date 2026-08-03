@@ -183,14 +183,18 @@ DEFERRED: <out-of-scope observations that must not trigger another fix cycle, or
 RESIDUAL RISK: <most important remaining risk, or none>
 ~~~
 
+The `REVIEW CYCLE` line is required in every final-review packet because the shipped hook
+keys the budget off that marker. A commitment-boundary consult must not carry the marker
+or it will consume final-review budget.
+
 If any fix is made after review, discard the verdict and run a new fresh review inside
-the review budget. That budget is at most 3 final reviews per deliverable, tracked in
-`${CODEX_HOME:-$HOME/.codex}/tmp/sol-advisor/review-ledger.md` so it survives context
-compaction, and it is never reset by compaction, a corrected specification, an
-architecture revision, or a renegotiated scope. When the budget is exhausted, a finding
-survives two consecutive fix cycles, or `rethink` arrives at cycle 2 or later, stop the
-loop and hand the unresolved findings and options back to the user instead of spawning
-another lane. See SKILL.md's bounded-review-loop section for the full stop conditions.
+the review budget. That budget is at most 3 final reviews per deliverable, tracked by the
+hook in `$PLUGIN_DATA/review-budget.jsonl` so it survives context compaction, and it is
+never reset by compaction, a corrected specification, an architecture revision, or a
+renegotiated scope. When the budget is exhausted, a finding survives two consecutive fix
+cycles, or `rethink` arrives at cycle 2 or later, stop the loop and hand the unresolved
+findings and options back to the user instead of spawning another lane. See SKILL.md's
+bounded-review-loop section for the full stop conditions.
 
 Sol reviewing Sol is context-clean, not cross-model-family independence.
 

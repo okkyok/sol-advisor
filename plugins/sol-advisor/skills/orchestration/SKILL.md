@@ -210,29 +210,27 @@ Apply the observed sandbox policy:
 
 The final review is budgeted. Unbounded, `fix-first` -> Terra fix -> fresh review repeats
 until the task is interrupted, because a reviewer with a fresh context can always find
-something new. Termination is the architect's responsibility, not the reviewer's.
+something new. Termination is the architect's responsibility, not the reviewer's, but
+the architect's compliance is no longer what makes the budget hold.
 
 Budget: at most 3 final reviews per deliverable, meaning the first review plus at most 2
 re-reviews. Count every final review, including one that follows a `rethink`.
 
-Persist the count outside the conversation. Before each final review, append one line to
-the ledger:
+The plugin's `PreToolUse` hook counts each final-review spawn and denies the fourth at
+the host level. The primary session does not maintain the count. The hook maintains
+`$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
+deliverable has used. Do not hand-edit it.
 
-~~~sh
-ledger_dir="${CODEX_HOME:-$HOME/.codex}/tmp/sol-advisor"
-mkdir -p "$ledger_dir"
-printf '%s | %s | cycle %s/3 | %s | %s\n' \
-  "<UTC timestamp>" "<deliverable id>" "<n>" "<verdict, or pending>" "<one-line summary>" \
-  >> "$ledger_dir/review-ledger.md"
-~~~
+The marker contract is load-bearing. Every final-review packet MUST contain a
+`REVIEW CYCLE` section or the hook will not count it and the budget silently will not
+apply. A commitment-boundary consult MUST NOT contain that marker or it will consume
+budget it should not.
 
-Read that ledger to recover `n` after context compaction, a session restart, or a
-handoff; never rely on conversation memory for the count.
-
-The budget belongs to the deliverable. Never reset it because context was compacted, the
-specification was corrected, the architecture was revised, or the scope was renegotiated.
-Only an explicit user decision to change the goal starts a new deliverable id, and you
-must say so when it happens.
+The budget is keyed to the session and belongs to the deliverable. Never reset it because
+context was compacted, the specification was corrected, the architecture was revised,
+or the scope was renegotiated. Starting a genuinely new deliverable inside the same
+session requires appending a `new-deliverable` record with the command documented in the
+hook's denial. That reset is deliberately recorded and auditable rather than invisible.
 
 Freeze the review scope after cycle 1. Cycle 1 defines the complete finding set. Cycles 2
 and 3 judge only:
@@ -253,3 +251,6 @@ Stop and hand control back to the user instead of spawning another review when:
 On a stop condition, do not report the deliverable complete and do not spawn another
 lane. Report the ledger lines, the current diff, the verification evidence, the unresolved
 findings, and the options you see, then ask the user which to take.
+
+A hook denial is not an error to route around; it is this stop condition firing. Hand the
+unresolved findings, current evidence, and options to the user.
