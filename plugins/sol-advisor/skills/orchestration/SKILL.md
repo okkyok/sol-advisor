@@ -161,6 +161,15 @@ Treat worker reports as claims. Before acceptance:
 4. Compare the evidence with the objective, interfaces, and constraints.
 5. Delegate corrections when the evidence or diff is wrong.
 
+Verify in the environment the real caller has, not one the test constructs. A test that
+supplies the inputs the caller cannot supply proves nothing about the caller. Two
+defects shipped through a green suite for exactly this reason: a helper read a variable
+that only hook processes receive while every test exported it by hand, and a script used
+a here-document that a read-only sandbox refuses while every test ran unsandboxed. Both
+suites passed at every commit. When a change depends on ambient state -- environment
+variables, sandbox policy, trust, installed layout -- exercise it once from a real
+session before accepting it, and write the assertion that would have caught it.
+
 ## Consult Sol at commitment boundaries
 
 Before a consequential architecture, migration, public API, or wide refactor, spawn a

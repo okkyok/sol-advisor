@@ -210,6 +210,28 @@ A failed delegation gets one corrected re-specification; a second failure on the
 objective stops delegation and returns the question to the primary session or a
 commitment-boundary Sol consult instead of trying a third time.
 
+## Retro
+
+The ledger is only worth keeping if someone reads it. After ten to twenty deliverables,
+run the reader and question the numbers rather than the impressions:
+
+~~~sh
+plugin_dir="$(codex plugin list --json | jq -r '.installed[] | select(.pluginId == "sol-advisor@sol-advisor") | .source.path')"
+sh "$plugin_dir/scripts/ledger-report.sh"
+~~~
+
+Three things are worth arguing with. A cap-hit rate above 25% means cycle 1 is not
+producing the complete finding set, so freeze scope harder rather than raising the
+budget. More resets than deliverables means the budget is being routed around; the
+records name the sessions, so the pattern is checkable rather than deniable. And a
+cycle distribution concentrated at 1 means the budget is not the binding constraint at
+all, and the interesting question moved elsewhere.
+
+The spawn-floor number quoted in the skill measures a spawn, not a delegation. Before
+leaning on it to justify keeping work in the primary session, check what a completed
+delegation actually costs end to end in your own records; the two differ by orders of
+magnitude, and the second one is the number the decision turns on.
+
 ## Local development
 
 Install a checkout as a local marketplace when you want Codex to use its skill:
