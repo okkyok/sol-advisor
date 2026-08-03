@@ -109,7 +109,7 @@ for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.5.2 ] || fail "manifest version is not 0.5.2"
+[ "$(jq -r '.version' "$manifest")" = 0.5.3 ] || fail "manifest version is not 0.5.3"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
@@ -234,7 +234,40 @@ mkdir "$malformed_data"
 printf '%s\n' 'not json at all' > "$malformed_data/hook-status.json"
 if inert_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$malformed_data"); then fail "checker accepted a malformed heartbeat"; fi
 [ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "malformed heartbeat output did not start with HOOK INERT"
-pass "hook liveness heartbeat, manifest version match, and trust-checker outcomes"
+
+fake_script_dir=$tmp_dir/fake/plugins/cache/mp/plug/9.9.9/scripts
+fake_data=$tmp_dir/fake/plugins/data/mp-plug
+fake_codex_home=$tmp_dir/fake-empty-codex-home
+mkdir -p "$fake_script_dir" "$fake_data" "$fake_codex_home"
+fake_data=$(CDPATH= cd "$fake_data" && pwd)
+cp "$script_dir/check-hook-trust.sh" "$fake_script_dir/check-hook-trust.sh"
+cp "$liveness_status" "$fake_data/hook-status.json"
+if ! active_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$fake_codex_home" sh "$fake_script_dir/check-hook-trust.sh"); then fail "checker rejected a derived-path heartbeat"; fi
+[ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "derived-path output did not start with HOOK ACTIVE"
+printf '%s\n' "$active_output" | grep -Fq "$fake_data" || fail "derived-path output did not name the derived data directory"
+
+fake_inert_script_dir=$tmp_dir/fake-inert/plugins/cache/mp/plug/9.9.9/scripts
+fake_inert_data=$tmp_dir/fake-inert/plugins/data/mp-plug
+fake_inert_codex_home=$tmp_dir/fake-inert-empty-codex-home
+mkdir -p "$fake_inert_script_dir" "$fake_inert_data" "$fake_inert_codex_home"
+fake_inert_data=$(CDPATH= cd "$fake_inert_data" && pwd)
+cp "$script_dir/check-hook-trust.sh" "$fake_inert_script_dir/check-hook-trust.sh"
+before=$(snapshot_files "$fake_inert_data")
+if inert_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$fake_inert_codex_home" sh "$fake_inert_script_dir/check-hook-trust.sh"); then fail "checker accepted a missing derived-path heartbeat"; fi
+after=$(snapshot_files "$fake_inert_data")
+[ "$before" = "$after" ] || fail "inert checker mutated the derived data directory"
+[ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "missing derived-path output did not start with HOOK INERT"
+printf '%s\n' "$inert_output" | grep -Fq "$fake_inert_data" || fail "inert output omitted the derived candidate"
+printf '%s\n' "$inert_output" | grep -Fq "$fake_inert_codex_home/sol-advisor" || fail "inert output did not name more than one candidate"
+
+override_data=$tmp_dir/hook-override
+exported_data=$tmp_dir/hook-exported
+mkdir "$override_data" "$exported_data"
+cp "$liveness_status" "$override_data/hook-status.json"
+if ! active_output=$(PLUGIN_DATA="$exported_data" sh "$script_dir/check-hook-trust.sh" --data-dir "$override_data"); then fail "--data-dir did not win over PLUGIN_DATA"; fi
+[ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "--data-dir precedence output did not start with HOOK ACTIVE"
+printf '%s\n' "$active_output" | grep -Fq "$override_data" || fail "--data-dir precedence output named the wrong data directory"
+pass "hook liveness, derived data resolution, precedence, read-only behavior, and trust-checker outcomes"
 
 python3 - "$templates" <<'PY'
 from pathlib import Path

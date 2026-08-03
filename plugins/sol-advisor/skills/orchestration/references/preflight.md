@@ -24,7 +24,9 @@ spawning a lane, complete steps 4-5 before accepting its result:
    workflow still runs -- but the architect must say so plainly in its final report:
    the review budget was not machine-enforced during this deliverable, and the loop was
    bounded only by the architect's own discipline. Never claim an enforced budget
-   without a fresh `HOOK ACTIVE`.
+   without a fresh `HOOK ACTIVE`. The checker prints the data directory it resolved;
+   `review-budget.jsonl` lives in that same directory, so read the ledger from the
+   printed path rather than from an unavailable `$PLUGIN_DATA` value.
 
 2. Resolve `../../../scripts/install-agents.sh` relative to this file and run its
    non-mutating exactness check:
