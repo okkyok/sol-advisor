@@ -221,11 +221,10 @@ the host level. The primary session does not maintain the count. The hook mainta
 `$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
 deliverable has used. Do not hand-edit it.
 
-Enforcement is conditional on the host trusting the plugin's hooks. An untrusted or
-inert hook is indistinguishable from an enforced one from inside a session, so treat
-the budget as binding on your own discipline until the ledger proves otherwise: if
-`$PLUGIN_DATA/review-budget.jsonl` has no record after a final-review spawn, the hook
-did not run and nothing is enforcing anything.
+Before the first final review, run the preflight's hook-liveness check at
+`scripts/check-hook-trust.sh`. `HOOK ACTIVE` means the host holds the budget. `HOOK
+INERT` means the budget is prose again; report that plainly in the final report rather
+than assuming enforcement.
 
 The marker contract is load-bearing. Every final-review packet MUST contain a
 `REVIEW CYCLE` section or the hook will not count it and the budget silently will not

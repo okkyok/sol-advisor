@@ -8,10 +8,25 @@ The three role files are user-owned native custom-agent TOML files. Installing o
 updating the plugin does not automatically register them. Install them separately and
 start a fresh Codex task so native discovery sees the current profiles.
 
-Before every delegation, complete steps 1-2. After spawning a lane, complete steps 3-4
-before accepting its result:
+Complete step 1 once per session. Before every delegation, complete steps 2-3. After
+spawning a lane, complete steps 4-5 before accepting its result:
 
-1. Resolve `../../../scripts/install-agents.sh` relative to this file and run its
+1. Verify that hook enforcement is live before relying on it, by running:
+
+   ~~~sh
+   references_dir=<directory-containing-this-file>
+   checker="$references_dir/../../../scripts/check-hook-trust.sh"
+   sh "$checker"
+   ~~~
+
+   `HOOK ACTIVE` means the review budget is enforced by the host; confirm the printed
+   session id matches the current session. `HOOK INERT` does not stop the lane -- the
+   workflow still runs -- but the architect must say so plainly in its final report:
+   the review budget was not machine-enforced during this deliverable, and the loop was
+   bounded only by the architect's own discipline. Never claim an enforced budget
+   without a fresh `HOOK ACTIVE`.
+
+2. Resolve `../../../scripts/install-agents.sh` relative to this file and run its
    non-mutating exactness check:
 
    ~~~sh
@@ -26,7 +41,7 @@ before accepting its result:
    lane. Give the user the installer path and reported destination. Never work
    around failure with another agent, model, or effort.
 
-2. Inspect the native spawn tool's available `agent_type` entries. All three exact
+3. Inspect the native spawn tool's available `agent_type` entries. All three exact
    names must be exposed:
 
    - `sol_advisor_terra_implementer`
@@ -37,7 +52,7 @@ before accepting its result:
    fresh task, and update Codex if the name remains unavailable. Do not substitute a
    built-in or similarly named role.
 
-3. Treat exact templates plus observed runtime routing as an acceptance gate.
+4. Treat exact templates plus observed runtime routing as an acceptance gate.
    Inspect public native spawn/details metadata first. It must identify the selected
    custom role. When it exposes model or effort, compare them with the role pin.
 
@@ -56,7 +71,7 @@ before accepting its result:
    the floor lane, and Sol / high for review. Missing, inconsistent, unavailable, or
    unobservable routing stops that lane.
 
-4. For every Sol review, capture the observed sandbox policy type and permission
+5. For every Sol review, capture the observed sandbox policy type and permission
    profile type. The shipped reviewer requests read-only sandboxing, but the host may
    broaden it. Never call the review OS-enforced read-only unless the observed sandbox
    policy type is `read-only`.

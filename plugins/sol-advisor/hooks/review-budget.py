@@ -10,6 +10,39 @@ import sys
 def main():
     try:
         payload = json.loads(sys.stdin.read())
+
+        # This hook deliberately has no matcher in hooks.json. Narrowing it to
+        # spawn_agent would hide the heartbeat from ordinary shell commands and
+        # destroy the liveness check.
+        try:
+            data_dir = os.environ.get("PLUGIN_DATA") or os.environ.get(
+                "CLAUDE_PLUGIN_DATA"
+            )
+            if not data_dir:
+                codex_home = os.environ.get("CODEX_HOME")
+                if not codex_home:
+                    codex_home = os.path.join(os.environ["HOME"], ".codex")
+                data_dir = os.path.join(codex_home, "sol-advisor")
+            heartbeat_path = Path(os.path.abspath(data_dir)) / "hook-status.json"
+            heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
+            heartbeat_temp = heartbeat_path.with_name(
+                f"{heartbeat_path.name}.{os.getpid()}.tmp"
+            )
+            heartbeat = {
+                "ts": datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "session_id": payload.get("session_id"),
+                "plugin_version": "0.5.2",
+            }
+            heartbeat_temp.write_text(
+                json.dumps(heartbeat, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(heartbeat_temp, heartbeat_path)
+        except BaseException:
+            pass
+
         if payload.get("hook_event_name") != "PreToolUse":
             return
         if payload.get("tool_name") != "spawn_agent":

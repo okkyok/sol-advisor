@@ -188,6 +188,13 @@ design, so malformed input or an internal bug can never block a Codex session. C
 the user to trust a plugin's hooks on first use, and enforcement remains inert until that
 trust is granted.
 
+The hook writes a liveness heartbeat to `$PLUGIN_DATA/hook-status.json` on every
+`PreToolUse` event. `scripts/check-hook-trust.sh` reads it and reports `HOOK ACTIVE` or
+`HOOK INERT`. The check is self-validating because `PreToolUse` fires before the checker,
+itself a shell command, runs, so its own invocation produces the heartbeat it reads. The
+hook deliberately has no `matcher` in `hooks.json`: narrowing it would hide the heartbeat
+from ordinary tool calls and destroy the liveness check.
+
 ### Choosing a lane
 
 The skill classifies every task into one of six classes (commit, implement, explore,

@@ -104,12 +104,12 @@ LEGACY_LUNA
   [ "$(shasum -a 256 "$target/$luna_file" | awk '{print $1}')" = "$legacy_luna_sha256" ] || fail "legacy Luna fixture digest drifted"
 }
 
-for required in "$installer" "$runtime_inspector" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
+for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
   test -f "$required" || fail "required file missing: $required"
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.5.1 ] || fail "manifest version is not 0.5.1"
+[ "$(jq -r '.version' "$manifest")" = 0.5.2 ] || fail "manifest version is not 0.5.2"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
@@ -187,6 +187,54 @@ jq -s -e '
 if ! hook_output=$(printf '%s' 'not json at all' | PLUGIN_DATA="$hook_data" python3 "$review_hook"); then fail "malformed input did not exit 0"; fi
 [ -z "$hook_output" ] || fail "malformed input produced stdout"
 pass "review-budget hook filtering, enforcement, reset, and fail-open behavior"
+
+liveness_data=$tmp_dir/hook-liveness
+liveness_status=$liveness_data/hook-status.json
+liveness_payload='{"hook_event_name":"PreToolUse","tool_name":"exec","session_id":"liveness-session","cwd":"/fixture","tool_input":{}}'
+if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "liveness payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "liveness payload produced stdout"
+test ! -e "$liveness_data/review-budget.jsonl" || fail "liveness payload created the review ledger"
+python3 - "$liveness_status" <<'PY'
+import datetime
+import json
+from pathlib import Path
+import sys
+
+heartbeat = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if set(heartbeat) != {"ts", "session_id", "plugin_version"}:
+    raise SystemExit("heartbeat keys are not exact")
+if heartbeat["session_id"] != "liveness-session":
+    raise SystemExit("heartbeat session id is wrong")
+timestamp = heartbeat["ts"]
+if not isinstance(timestamp, str) or not timestamp.endswith("Z"):
+    raise SystemExit("heartbeat timestamp is not UTC ISO-8601")
+parsed = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+if parsed.tzinfo is None:
+    raise SystemExit("heartbeat timestamp has no timezone")
+if abs((datetime.datetime.now(datetime.timezone.utc) - parsed).total_seconds()) > 60:
+    raise SystemExit("heartbeat timestamp is not plausibly fresh")
+PY
+[ "$(jq -r '.plugin_version' "$liveness_status")" = "$(jq -r '.version' "$manifest")" ] || fail "heartbeat plugin version does not match manifest"
+if ! active_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_data"); then fail "checker rejected a fresh heartbeat"; fi
+[ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "fresh heartbeat output did not start with HOOK ACTIVE"
+
+empty_data=$tmp_dir/hook-empty
+mkdir "$empty_data"
+if inert_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$empty_data"); then fail "checker accepted a missing heartbeat"; fi
+[ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "missing heartbeat output did not start with HOOK INERT"
+
+stale_data=$tmp_dir/hook-stale
+mkdir "$stale_data"
+python3 -c "import datetime,json; print(json.dumps({'ts': (datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=2)).isoformat().replace('+00:00','Z'), 'session_id':'stale-session','plugin_version':'0.5.2'}))" > "$stale_data/hook-status.json"
+if inert_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$stale_data"); then fail "checker accepted a stale heartbeat"; fi
+[ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "stale heartbeat output did not start with HOOK INERT"
+
+malformed_data=$tmp_dir/hook-malformed
+mkdir "$malformed_data"
+printf '%s\n' 'not json at all' > "$malformed_data/hook-status.json"
+if inert_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$malformed_data"); then fail "checker accepted a malformed heartbeat"; fi
+[ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "malformed heartbeat output did not start with HOOK INERT"
+pass "hook liveness heartbeat, manifest version match, and trust-checker outcomes"
 
 python3 - "$templates" <<'PY'
 from pathlib import Path
@@ -381,6 +429,7 @@ pass "preflight three required role names and retired two-lane wording absence"
 
 sh -n "$installer"
 sh -n "$runtime_inspector"
+sh -n "$script_dir/check-hook-trust.sh"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 
