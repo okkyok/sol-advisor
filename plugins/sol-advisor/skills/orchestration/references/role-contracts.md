@@ -6,16 +6,17 @@ Adapt every placeholder without removing a required field.
 
 ## Required preflight
 
-Before every spawn, complete steps 1-2 of SKILL.md's preflight. After spawning,
+Before every spawn, complete steps 1-2 of [preflight.md](preflight.md). After spawning,
 complete steps 3-4 before accepting the result:
 
-1. Require the non-mutating companion check to prove both installed files exactly
+1. Require the non-mutating companion check to prove all three installed files exactly
    match current templates and the retired companion file is absent.
-2. Require native exposure of exactly `sol_advisor_terra_implementer` and
-   `sol_advisor_sol_reviewer`.
+2. Require native exposure of exactly `sol_advisor_terra_implementer`,
+   `sol_advisor_sol_reviewer`, and `sol_advisor_luna_committer`.
 3. Observe the selected role, model, and effort through public spawn/details metadata
    first, using the local runtime inspector only for omitted fields. Accept only
-   Terra / High for implementation and Sol / High for review.
+   Terra / High for judgment-bearing implementation, Luna / Medium for the floor
+   lane, and Sol / High for review.
 4. For the reviewer, capture actual sandbox policy and permission profile types.
 
 A missing, stale, unsafe, conflicting, unavailable, inconsistent, or unobservable
@@ -64,7 +65,7 @@ GAPS: <unfinished work, ambiguity, or none>
 
 The primary session must inspect the diff and rerun verification itself.
 
-## Terra / High - sole implementation lane
+## Terra / High - implementation lane for judgment-bearing work
 
 Use this lane for every delegated implementation, from routine edits through complex,
 security-sensitive, context-heavy, and broad work.
@@ -87,6 +88,32 @@ ROLE
 Act as Sol Advisor's sole implementation worker. Resolve the supplied specification
 within the settled architecture, preserve every stated interface and constraint, and
 surface ambiguity instead of redesigning the architecture.
+
+<paste and complete the Shared implementation contract>
+~~~
+
+## Luna / Medium - floor lane for mechanical edits
+
+Use this lane for mechanical, fully-determined edits whose specification leaves
+nothing to decide.
+
+Spawn exactly:
+
+~~~text
+agent_type: sol_advisor_luna_committer
+fork_turns: none
+~~~
+
+The installed role pins GPT-5.6 Luna at medium reasoning. Do not attach per-spawn model
+or reasoning fields.
+
+Prompt:
+
+~~~text
+ROLE
+Act as Sol Advisor's floor-lane implementation worker. Execute the supplied
+specification literally. If it requires choosing between reasonable designs, return
+`STATUS: blocked` with the open question instead of choosing one.
 
 <paste and complete the Shared implementation contract>
 ~~~
@@ -140,6 +167,12 @@ regressions, scope discipline, interface preservation, test adequacy, and materi
 Reserve `fix-first` for defects that block the stated goal or introduce material risk.
 Style preferences, speculative hardening, and improvements outside the stated goal are
 DEFERRED, not findings.
+
+Stay under 300 words; the reader is another model mid-task. A sound change set gets
+one line: do not manufacture objections to justify having been consulted. Findings
+must be defects, not preferences; if the change set is correct and complete for the
+stated goal, the verdict is ship even when a different implementation would have been
+possible.
 
 SOL REVIEW
 CYCLE: <n> of 3

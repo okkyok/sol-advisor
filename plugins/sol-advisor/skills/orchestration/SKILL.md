@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: "Codex-native architect and delegation workflow using one separately installed GPT-5.6 Terra custom agent at high reasoning for all implementation and a fresh GPT-5.6 Sol reviewer at high reasoning with a requested read-only profile. Use for delegated implementation, multi-task builds, features, bug fixes, refactors, migrations, five-part implementation specs, parent verification, commitment-boundary advice, and final independent-context Sol review."
+description: "Codex-native architect and delegation workflow using separately installed custom agents: a GPT-5.6 Terra implementer at high reasoning, a GPT-5.6 Luna floor lane at medium reasoning for mechanical edits, and a fresh GPT-5.6 Sol reviewer at high reasoning with a requested read-only profile. Use for classifying a task and choosing a lane, delegated implementation, multi-task builds, features, bug fixes, refactors, migrations, five-part implementation specs, parent verification, commitment-boundary advice, and the budgeted final Sol review."
 ---
 
 # Sol Advisor Orchestration
@@ -11,8 +11,25 @@ implementation to the native Terra / High role, then require a fresh Sol verdict
 reporting the deliverable complete. These are native Codex custom-agent threads, not a
 nested Codex CLI wrapper or a global default-subagent setting.
 
-Read [references/role-contracts.md](references/role-contracts.md) before the first
-delegation in a session.
+Read [references/role-contracts.md](references/role-contracts.md) and
+[references/preflight.md](references/preflight.md) before the first delegation in a
+session.
+
+## What this workflow optimizes
+
+The primary Sol / High session is the scarcest resource in this workflow. Its output
+is decomposition, specifications, routing decisions, verdicts on evidence, and short
+reports, not implementation text.
+
+Delegation exists to keep the primary context lean, not merely to save money:
+everything in it is re-read on every turn.
+
+Terminating is worth more than one more finding. A reviewer with a fresh context can
+always produce another finding, so the workflow optimizes for a correct ship/stop
+decision made once, not for the largest possible finding count.
+
+When a rule below does not cover the situation, extrapolate from these three, in this
+order.
 
 ## Confirm the primary session
 
@@ -24,63 +41,11 @@ change the primary model itself; never assume or claim this prerequisite is sati
 
 ## Preflight the companion custom agents
 
-The two role files are user-owned native custom-agent TOML files. Installing or
-updating the plugin does not automatically register them. Install them separately and
-start a fresh Codex task so native discovery sees the current profiles.
-
-Before every delegation, complete steps 1-2. After spawning a lane, complete steps
-3-4 before accepting its result:
-
-1. Resolve `../../scripts/install-agents.sh` relative to this SKILL.md and run its
-   non-mutating exactness check:
-
-   ~~~sh
-   skill_dir=<directory-containing-this-SKILL.md>
-   installer="$skill_dir/../../scripts/install-agents.sh"
-   sh "$installer" --check
-   ~~~
-
-   It must exit zero. This proves Terra and Sol match the shipped templates exactly
-   and the retired Luna companion file is absent. If the check reports a missing,
-   stale, unsafe, or conflicting file, stop the affected lane. Give the user the
-   installer path and reported destination. Never work around failure with another
-   agent, model, or effort.
-
-2. Inspect the native spawn tool's available `agent_type` entries. Both exact names
-   must be exposed:
-
-   - `sol_advisor_terra_implementer`
-   - `sol_advisor_sol_reviewer`
-
-   If either is missing, tell the user to install/check the companion files, start a
-   fresh task, and update Codex if the name remains unavailable. Do not substitute a
-   built-in or similarly named role.
-
-3. Treat exact templates plus observed runtime routing as an acceptance gate. Inspect
-   public native spawn/details metadata first. It must identify the selected custom
-   role. When it exposes model or effort, compare them with the role pin.
-
-   If public details omit model or effort and the local rollout is accessible, resolve
-   `../../scripts/inspect-agent-runtime.sh` relative to this SKILL.md and run:
-
-   ~~~sh
-   skill_dir=<directory-containing-this-SKILL.md>
-   runtime_inspector="$skill_dir/../../scripts/inspect-agent-runtime.sh"
-   sh "$runtime_inspector" <native-subagent-thread-id>
-   ~~~
-
-   The helper's allowlisted output is the authoritative local fallback for omitted
-   model and effort. If public and local values both exist, they must agree. Accepted
-   values are Terra / high for implementation and Sol / high for review. Missing,
-   inconsistent, unavailable, or unobservable routing stops that lane.
-
-4. For every Sol review, capture the observed sandbox policy type and permission
-   profile type. The shipped reviewer requests read-only sandboxing, but the host may
-   broaden it. Never call the review OS-enforced read-only unless the observed sandbox
-   policy type is `read-only`.
-
-The custom-agent TOML, not the spawn call, pins model and effort. Never add per-spawn
-model or reasoning overrides.
+Complete the full preflight in [references/preflight.md](references/preflight.md)
+before the first delegation in a session, and again before accepting any lane's
+result. A missing, stale, unsafe, conflicting, unavailable, inconsistent, or
+unobservable role, model, or effort stops that lane. Never work around a failure with
+another agent, model, or effort.
 
 ## Keep architect work in the primary session
 
@@ -96,7 +61,60 @@ Do not type implementation code, tests, boilerplate, or mechanical configuration
 the primary session when the Terra lane can do it. If its result is wrong, correct the
 specification and delegate the fix. Do not silently repair a failed worker patch.
 
-## Route every implementation through Terra / High
+## Classify the task and choose the lane
+
+Before spending Sol effort on anything, classify the task and route it. The default
+is a lane; keeping work in the primary session requires naming one of the five
+exceptions below.
+
+| Class | Definition | Default lane |
+|---|---|---|
+| commit | A trivial, fully-determined edit: a typo, one-line fix, version bump, config value, or one known pattern applied across many files. | The floor lane. |
+| implement | Write or edit code, tests, or config against a specification. | Terra / High |
+| explore | Read or search the codebase or history to answer a question. | Terra / High |
+| ingest | Absorb external material (docs, logs, large files) into usable form. | Terra / High |
+| review | Judge a completed change set against a stated goal. | Fresh Sol reviewer |
+| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Terra / High, after a commitment-boundary Sol consult |
+
+The floor lane's name is `sol_advisor_luna_committer`.
+
+~~~text
+agent_type: sol_advisor_luna_committer
+fork_turns: none
+~~~
+
+The installed role pins GPT-5.6 Luna at medium reasoning. Per-spawn model and reasoning
+fields are omitted. Work that turns out to need judgment comes back as blocked and is
+re-routed to Terra rather than being finished in the floor lane.
+
+There is no lane above Terra. A `hardest` task gets a commitment-boundary Sol consult
+before implementation, not an escalation after it fails.
+
+The deciding rule: how much of the outcome does the specification determine? Fully and
+mechanically, route to the floor lane. Otherwise, route to Terra. Judgment about
+architecture, interfaces, hypotheses, and evidence never leaves the primary session,
+because that judgment is the architect's own work, not a lane's.
+
+Keep work in the primary session only for one of these five named reasons:
+
+1. Context-bound: the task depends on conversation state, and writing a
+   self-contained five-part specification would cost more than doing the work.
+2. Below the spawn floor: measured on this machine on 2026-08-03 with codex 0.146.0,
+   spawn_agent returns an agent id in about 0.13 s, and a complete no-op delegation
+   (spawn, wait, result) costs about 8.8 s of wall clock. This floor is low precisely
+   because the lanes are in-process native threads, not a separate CLI process, so
+   "faster to do it myself" is a valid exception only for a single-line, single-file
+   edit, and only when the architect names the number.
+3. Architect work by definition: decomposition, interface design, hypothesis
+   selection, spec writing, and judging verification evidence.
+4. The final review gate: the fresh Sol review never moves into the primary session.
+5. Tooling the lane cannot reach: primary-session plugins, MCP servers, or browser
+   access a custom-agent thread does not have.
+
+These exceptions are a checklist applied after classifying a task, not a licence to
+skip classification.
+
+## Route implementation through Terra / High
 
 Use the same role for routine features, mechanical edits, difficult debugging,
 security-sensitive work, non-trivial algorithms, and broad refactors. There is no
@@ -120,7 +138,17 @@ Routing rules:
   adapt to concurrent changes.
 - Run independent non-overlapping work concurrently only when useful. Keep shared-file
   edits and dependency chains serial.
-- Give a failed lane a corrected specification; never repeat an unchanged prompt.
+- First failure: correct the specification and re-delegate once, naming the gap that
+  made it fail. Never repeat an unchanged prompt.
+- Second failure on the same objective: stop delegating. Inspect the code in the
+  primary session and either re-specify from what you found or take the question to a
+  commitment-boundary Sol consult. Two failures are evidence the specification is
+  wrong, not that the lane is unlucky.
+- There is no third delegation of the same objective. Report the situation to the
+  user instead.
+- A floor-lane task that returns blocked is a routing error, not a lane failure.
+  Re-classify it and send it to Terra with the gap named; it does not consume a step
+  of the first-failure/second-failure delegation ladder.
 - Never silently substitute a role, model, or reasoning level.
 
 ## Verify every implementation

@@ -1,4 +1,4 @@
 interface:
   display_name: "Sol Advisor Orchestration"
-  short_description: "Route all implementation through Terra / High, then require fresh Sol review"
-  default_prompt: "Use $orchestration to preflight Sol Advisor's Terra / High and Sol companion roles; route implementation, verify the evidence, and obtain a fresh Sol verdict."
+  short_description: "Route judgment to Terra / High and mechanical edits to Luna / Medium; verify evidence, then budget fresh Sol review"
+  default_prompt: "Use $orchestration to preflight three companion roles; classify work for Terra / High judgment or the Luna / Medium floor lane, verify evidence in the primary session, and obtain a fresh Sol verdict within the review budget."

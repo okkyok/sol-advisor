@@ -1,5 +1,5 @@
 #!/bin/sh
-# Repository-local verification for Sol Advisor's two-role companion migration.
+# Repository-local verification for Sol Advisor's three-role companion migration.
 
 set -eu
 
@@ -15,6 +15,7 @@ templates=$plugin_dir/agents
 manifest=$plugin_dir/.codex-plugin/plugin.json
 skill=$plugin_dir/skills/orchestration/SKILL.md
 contracts=$plugin_dir/skills/orchestration/references/role-contracts.md
+preflight=$plugin_dir/skills/orchestration/references/preflight.md
 readme=$repo_dir/README.md
 
 tmp_base=${TMPDIR:-/tmp}
@@ -33,9 +34,11 @@ tmp_dir=$(mktemp -d "$tmp_base/sol-advisor-verify.XXXXXX") || fail "could not cr
 
 terra_file=sol-advisor-terra-implementer.toml
 sol_file=sol-advisor-sol-reviewer.toml
+floor_file=sol-advisor-luna-committer.toml
 luna_file=sol-advisor-luna-implementer.toml
 legacy_terra_sha256=4425a8c1f21ce8c6af93f96adc253bbc33ea301f1389b3fa8ce350be08584eca
 legacy_luna_sha256=fba1b42849d93737e83b094a2ab0b1611f87ac37db7438c8bbdf581f0813f8eb
+prev_sol_sha256=0333acf0ef562bcfebd06009ac09bd1dd8cbc04c4cf28e08e9e049bd8bf202d2
 
 snapshot_files() {
   target=$1
@@ -99,12 +102,12 @@ LEGACY_LUNA
   [ "$(shasum -a 256 "$target/$luna_file" | awk '{print $1}')" = "$legacy_luna_sha256" ] || fail "legacy Luna fixture digest drifted"
 }
 
-for required in "$installer" "$runtime_inspector" "$manifest" "$skill" "$contracts" "$readme"; do
+for required in "$installer" "$runtime_inspector" "$manifest" "$skill" "$contracts" "$preflight" "$readme"; do
   test -f "$required" || fail "required file missing: $required"
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.3.1 ] || fail "manifest version is not 0.3.1"
+[ "$(jq -r '.version' "$manifest")" = 0.4.0 ] || fail "manifest version is not 0.4.0"
 pass "manifest JSON and version"
 
 python3 - "$templates" <<'PY'
@@ -124,6 +127,11 @@ expected = {
         "model_reasoning_effort": "high",
         "sandbox_mode": "read-only",
     },
+    "sol-advisor-luna-committer.toml": {
+        "name": "sol_advisor_luna_committer",
+        "model": "gpt-5.6-luna",
+        "model_reasoning_effort": "medium",
+    },
 }
 actual = {path.name for path in root.glob("*.toml")}
 if actual != set(expected):
@@ -136,18 +144,20 @@ for filename, pins in expected.items():
     for field, value in pins.items():
         if data.get(field) != value:
             raise SystemExit(f"{filename}: {field}={data.get(field)!r}, expected {value!r}")
-print("two exact role pins are valid")
+print("three exact role pins are valid")
 PY
-pass "exact two-role TOML inventory"
+pass "exact three-role TOML inventory"
 
 grep -Fq "legacy_terra_sha256=$legacy_terra_sha256" "$installer" || fail "installer legacy Terra digest mismatch"
 grep -Fq "legacy_luna_sha256=$legacy_luna_sha256" "$installer" || fail "installer legacy Luna digest mismatch"
+grep -Fq "prev_sol_sha256=$prev_sol_sha256" "$installer" || fail "installer previous Sol digest mismatch"
 pass "immutable v0.2.0 migration fingerprints"
 
 clean_target=$tmp_dir/clean
 sh "$installer" --target-dir "$clean_target"
 cmp -s "$templates/$terra_file" "$clean_target/$terra_file" || fail "clean Terra install mismatch"
 cmp -s "$templates/$sol_file" "$clean_target/$sol_file" || fail "clean Sol install mismatch"
+cmp -s "$templates/$floor_file" "$clean_target/$floor_file" || fail "clean floor-lane install mismatch"
 test ! -e "$clean_target/$luna_file" || fail "clean install created retired Luna role"
 sh "$installer" --target-dir "$clean_target" --check
 before=$(snapshot_files "$clean_target")
@@ -165,6 +175,7 @@ codex_home=$tmp_dir/codex-home
 CODEX_HOME="$codex_home" sh "$installer"
 cmp -s "$templates/$terra_file" "$codex_home/agents/$terra_file" || fail "CODEX_HOME Terra mismatch"
 cmp -s "$templates/$sol_file" "$codex_home/agents/$sol_file" || fail "CODEX_HOME Sol mismatch"
+cmp -s "$templates/$floor_file" "$codex_home/agents/$floor_file" || fail "CODEX_HOME floor-lane mismatch"
 test ! -e "$codex_home/config.toml" || fail "installer created config.toml"
 relative_parent=$tmp_dir/relative-parent
 mkdir "$relative_parent"
@@ -180,6 +191,30 @@ cmp -s "$templates/$sol_file" "$migration_target/$sol_file" || fail "Sol changed
 test ! -e "$migration_target/$luna_file" || fail "exact legacy Luna was not removed"
 sh "$installer" --target-dir "$migration_target" --check
 pass "exact v0.2.0 Terra replacement and Luna retirement"
+
+prev_sol_target=$tmp_dir/previous-sol-migration
+sh "$installer" --target-dir "$prev_sol_target"
+if ! command -v git >/dev/null 2>&1; then
+  printf '%s\n' "SKIP: predecessor Sol migration requires git"
+else
+  prev_sol_fixture=$tmp_dir/previous-sol-reviewer.toml
+  if ! git -C "$repo_dir" show HEAD:plugins/sol-advisor/agents/sol-advisor-sol-reviewer.toml > "$prev_sol_fixture"; then
+    printf '%s\n' "SKIP: predecessor Sol migration could not read the template from git"
+  else
+    cp "$prev_sol_fixture" "$prev_sol_target/$sol_file"
+    prev_sol_digest=$(shasum -a 256 "$prev_sol_target/$sol_file" | awk '{print $1}')
+    current_sol_digest=$(shasum -a 256 "$templates/$sol_file" | awk '{print $1}')
+    if [ "$prev_sol_digest" = "$current_sol_digest" ]; then
+      printf '%s\n' "SKIP: predecessor Sol template is byte-identical to the current template"
+    else
+      [ "$prev_sol_digest" = "$prev_sol_sha256" ] || fail "predecessor Sol fixture digest mismatch"
+      sh "$installer" --target-dir "$prev_sol_target"
+      cmp -s "$templates/$sol_file" "$prev_sol_target/$sol_file" || fail "previous Sol reviewer was not migrated"
+      sh "$installer" --target-dir "$prev_sol_target" --check
+      pass "previous shipped Sol reviewer migration"
+    fi
+  fi
+fi
 
 modified_luna=$tmp_dir/modified-luna
 write_legacy_roles "$modified_luna"
@@ -246,22 +281,29 @@ pass "runtime inspector Terra/High routing and safe refusal"
 for document in "$skill" "$contracts"; do
   grep -Fq 'agent_type: sol_advisor_terra_implementer' "$document" || fail "missing Terra spawn in $document"
   grep -Fq 'agent_type: sol_advisor_sol_reviewer' "$document" || fail "missing Sol spawn in $document"
+  grep -Fq 'agent_type: sol_advisor_luna_committer' "$document" || fail "missing floor-lane spawn in $document"
   grep -Fq 'fork_turns: none' "$document" || fail "missing fresh context in $document"
-  if grep -Eq 'agent_type:.*(luna|terra_max)' "$document"; then fail "retired implementation spawn remains in $document"; fi
+  if grep -Eq 'agent_type:.*(luna_implementer|terra_max)' "$document"; then fail "retired Luna implementer or Terra max spawn remains in $document"; fi
   if grep -Eq '^[[:space:]]*(model|reasoning_effort):' "$document"; then fail "per-spawn override remains in $document"; fi
 done
-grep -Fq '../../scripts/install-agents.sh' "$skill" || fail "skill does not resolve installer relatively"
-grep -Fq '../../scripts/inspect-agent-runtime.sh' "$skill" || fail "skill does not resolve inspector relatively"
-grep -Fqi 'public native spawn/details metadata first' "$skill" || fail "skill lacks public-details-first evidence rule"
+grep -Fq '../../scripts/install-agents.sh' "$preflight" || fail "preflight does not resolve installer relatively"
+grep -Fq '../../scripts/inspect-agent-runtime.sh' "$preflight" || fail "preflight does not resolve inspector relatively"
+grep -Fqi 'public native spawn/details metadata first' "$preflight" || fail "preflight lacks public-details-first evidence rule"
 grep -Fqi 'parent captures and verifies exact before-and-after' "$contracts" || fail "contracts lack behavioral read-only state check"
 forbidden_terra='sol_advisor_terra_'"max"
 forbidden_file='sol-advisor-terra-'"max"
 if rg -n "$forbidden_terra|$forbidden_file" "$readme" "$plugin_dir"; then fail "forbidden second Terra role remains"; fi
-pass "single-lane documentation and no per-spawn overrides"
+pass "three-lane documentation and no per-spawn overrides"
+grep -Fq 'sol_advisor_luna_committer' "$preflight" || fail "preflight is missing sol_advisor_luna_committer"
+for role in sol_advisor_terra_implementer sol_advisor_sol_reviewer sol_advisor_luna_committer; do
+  grep -Fq "$role" "$preflight" || fail "preflight is missing required role: $role"
+done
+if grep -Fq 'The two role files' "$preflight"; then fail "preflight retains retired two-lane role-file wording"; fi
+pass "preflight three required role names and retired two-lane wording absence"
 
 sh -n "$installer"
 sh -n "$runtime_inspector"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 
-printf '%s\n' "VERIFY PASSED: Sol Advisor two-role migration checks completed in $tmp_dir"
+printf '%s\n' "VERIFY PASSED: Sol Advisor three-role migration checks completed in $tmp_dir"

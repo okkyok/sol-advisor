@@ -15,6 +15,7 @@ I write [**Attention Heads**](https://attentionheads.substack.com/?utm_source=gi
 |---|---|---|---|
 | Orchestrator | Primary session | GPT-5.6 Sol / High | Requirements, architecture, decomposition, routing, and acceptance |
 | Implementation | sol_advisor_terra_implementer | GPT-5.6 Terra / High | Bounded work specified by the Sol orchestrator |
+| Floor | sol_advisor_luna_committer | GPT-5.6 Luna / Medium | Mechanical, fully-determined edits the specification leaves nothing to decide in |
 | Final review | sol_advisor_sol_reviewer | GPT-5.6 Sol / High / requests read-only | Fresh review of the actual diff and verification evidence |
 
 The final review is context-independent, not model-family-independent: Sol reviews
@@ -88,8 +89,10 @@ sh "$plugin_dir/scripts/install-agents.sh"
 sh "$plugin_dir/scripts/install-agents.sh" --check
 ~~~
 
-Version 0.3.1 recognizes only byte-exact v0.2.0 legacy
+Version 0.4.0 recognizes only byte-exact v0.2.0 legacy
 `sol-advisor-luna-implementer.toml` and `sol-advisor-terra-implementer.toml` files.
+The installer also migrates the previous shipped Sol reviewer template so a
+project-changed shipped template is not refused as a conflict.
 Normal installer mode replaces the exact legacy Terra file with the current Terra /
 High template, removes the exact legacy Luna file, and refuses modified, nonregular,
 or symlinked destinations without partial agent-file mutation. `--check` is
@@ -173,6 +176,17 @@ specification, an architecture revision, or a renegotiated scope. When the budge
 exhausted, a finding survives two consecutive fix cycles, or rethink arrives at cycle 2
 or later, the session stops and hands the unresolved findings and options to the user
 instead of spawning another lane.
+
+### Choosing a lane
+
+The skill classifies every task into one of six classes (commit, implement, explore,
+ingest, review, hardest) and routes it to the floor lane, Terra / High, or the fresh
+Sol reviewer by default, keeping work in the primary session only for five named
+exceptions: context-bound tasks, work below the measured spawn floor, architect work
+by definition, the final review gate, and tooling only the primary session can reach.
+A failed delegation gets one corrected re-specification; a second failure on the same
+objective stops delegation and returns the question to the primary session or a
+commitment-boundary Sol consult instead of trying a third time.
 
 ## Local development
 
