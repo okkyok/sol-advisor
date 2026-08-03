@@ -16,8 +16,12 @@ spawning a lane, complete steps 4-5 before accepting its result:
    ~~~sh
    references_dir=<directory-containing-this-file>
    checker="$references_dir/../../../scripts/check-hook-trust.sh"
-   sh "$checker" --nonce liveness-4f2b7c
+   sh "$checker" --nonce liveness-CHANGEME
    ~~~
+
+   Replace `CHANGEME` with a token you type fresh for this check and do not reuse.
+   Copying the example verbatim lets a concurrent session using the same token
+   satisfy your check, which is the failure this nonce exists to prevent.
 
    The nonce proves that the heartbeat belongs to this invocation. Running the
    checker without a nonce leaves a concurrent trusted session able to produce a

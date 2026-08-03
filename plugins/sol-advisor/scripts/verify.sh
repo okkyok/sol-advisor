@@ -111,7 +111,7 @@ for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.6.2 ] || fail "manifest version is not 0.6.2"
+[ "$(jq -r '.version' "$manifest")" = 0.6.3 ] || fail "manifest version is not 0.6.3"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 

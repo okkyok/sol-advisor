@@ -190,7 +190,7 @@ trust is granted.
 
 The hook writes a liveness heartbeat to `$PLUGIN_DATA/hook-status.json` on every
 `PreToolUse` event. `scripts/check-hook-trust.sh` reads it and reports `HOOK ACTIVE` or
-`HOOK INERT`. Pass a fresh literal nonce such as `--nonce liveness-4f2b7c`; the hook
+`HOOK INERT`. Pass a fresh literal nonce, never the example token verbatim; the hook
 copies that nonce from the checker command into the heartbeat, proving that the
 heartbeat came from that invocation rather than from a concurrent trusted session.
 The hook reads the command text before the shell expands it, so `$$`, `$(...)`,
