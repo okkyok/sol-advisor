@@ -190,14 +190,17 @@ trust is granted.
 
 The hook writes a liveness heartbeat to `$PLUGIN_DATA/hook-status.json` on every
 `PreToolUse` event. `scripts/check-hook-trust.sh` reads it and reports `HOOK ACTIVE` or
-`HOOK INERT`. Pass a nonce with `--nonce "$$-$(date +%s)"`; the hook copies that nonce
-from the checker command into the heartbeat, proving that the heartbeat came from that
-invocation rather than from a concurrent trusted session. A check without a nonce is
-reported as unverified. Denied fourth and later reviews are now recorded in the ledger
-without increasing the review count. Run `scripts/ledger-report.sh` to summarize cycles,
-cap hits, resets, and whether the ledger suggests the review scope is still growing. The
-hook deliberately has no `matcher` in `hooks.json`: narrowing it would hide the heartbeat
-from ordinary tool calls and destroy the liveness check.
+`HOOK INERT`. Pass a fresh literal nonce such as `--nonce liveness-4f2b7c`; the hook
+copies that nonce from the checker command into the heartbeat, proving that the
+heartbeat came from that invocation rather than from a concurrent trusted session.
+The hook reads the command text before the shell expands it, so `$$`, `$(...)`,
+backticks, or a variable in the nonce are invisible to the hook and produce a false
+`HOOK INERT`. A check without a nonce is reported as unverified. Denied fourth and
+later reviews are now recorded in the ledger without increasing the review count. Run
+`scripts/ledger-report.sh` to summarize cycles, cap hits, resets, and whether the ledger
+suggests the review scope is still growing. The hook deliberately has no `matcher` in
+`hooks.json`: narrowing it would hide the heartbeat from ordinary tool calls and
+destroy the liveness check.
 
 ### Choosing a lane
 
@@ -227,10 +230,11 @@ records name the sessions, so the pattern is checkable rather than deniable. And
 cycle distribution concentrated at 1 means the budget is not the binding constraint at
 all, and the interesting question moved elsewhere.
 
-The spawn-floor number quoted in the skill measures a spawn, not a delegation. Before
-leaning on it to justify keeping work in the primary session, check what a completed
-delegation actually costs end to end in your own records; the two differ by orders of
-magnitude, and the second one is the number the decision turns on.
+The spawn-floor number quoted in the skill measures a spawn, not a delegation. On the
+author's setup, a no-op spawn measured about 8.8 seconds wall clock, against a median
+of about 540 seconds for a completed delegation across 17 logged delegations. These
+are measurements from one setup, not universal constants; the completed-delegation
+cost is the number the keep-it-in-session decision actually turns on.
 
 ## Local development
 

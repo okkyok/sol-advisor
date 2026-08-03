@@ -16,12 +16,18 @@ spawning a lane, complete steps 4-5 before accepting its result:
    ~~~sh
    references_dir=<directory-containing-this-file>
    checker="$references_dir/../../../scripts/check-hook-trust.sh"
-   sh "$checker" --nonce "$$-$(date +%s)"
+   sh "$checker" --nonce liveness-4f2b7c
    ~~~
 
    The nonce proves that the heartbeat belongs to this invocation. Running the
    checker without a nonce leaves a concurrent trusted session able to produce a
    false `HOOK ACTIVE` result.
+
+   The hook reads the command text before the shell expands it, so a token produced
+   by `$$`, `$(date ...)`, backticks, or a variable is invisible to the hook and
+   guarantees a false `HOOK INERT`. The token must be a literal made of
+   `[A-Za-z0-9_.:-]`, 4 to 64 characters, chosen fresh each time so a stale heartbeat
+   cannot satisfy it.
 
    `HOOK ACTIVE` means the review budget is enforced by the host; confirm the printed
    session id matches the current session. `HOOK INERT` does not stop the lane -- the

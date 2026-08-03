@@ -111,7 +111,7 @@ for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.6.1 ] || fail "manifest version is not 0.6.1"
+[ "$(jq -r '.version' "$manifest")" = 0.6.2 ] || fail "manifest version is not 0.6.2"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
@@ -267,6 +267,29 @@ if ! active_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_
 [ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "fresh heartbeat output did not start with HOOK ACTIVE"
 printf '%s\n' "$active_output" | grep -Fq 'unverified because no nonce was supplied' || fail "nonce-free checker did not warn that the result is unverified"
 
+expanded_nonce_data=$tmp_dir/hook-expanded-nonce
+expanded_nonce_status=$expanded_nonce_data/hook-status.json
+mkdir "$expanded_nonce_data"
+expanded_nonce_payload='{"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"expanded-nonce-session","cwd":"/fixture","tool_input":{"command":"sh /path/check-hook-trust.sh --nonce \"$$-$(date +%s)\""}}'
+[ "$(printf '%s' "$expanded_nonce_payload" | jq -r '.tool_input.command')" = 'sh /path/check-hook-trust.sh --nonce "$$-$(date +%s)"' ] || fail "expanded nonce fixture was altered by the test shell"
+if ! hook_output=$(printf '%s' "$expanded_nonce_payload" | PLUGIN_DATA="$expanded_nonce_data" python3 "$review_hook"); then fail "expanded nonce payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "expanded nonce payload produced stdout"
+jq -e '(.nonce == null)' "$expanded_nonce_status" >/dev/null || fail "hook recorded shell-expansion syntax as a usable nonce"
+if expanded_nonce_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$expanded_nonce_data" --nonce something-valid); then fail "checker accepted a heartbeat with no nonce key"; else expanded_nonce_exit=$?; fi
+[ "$expanded_nonce_exit" -eq 1 ] || fail "missing heartbeat nonce did not exit 1"
+[ "$(printf '%s\n' "$expanded_nonce_output" | sed -n '1p')" = "HOOK INERT" ] || fail "missing heartbeat nonce output did not start with HOOK INERT"
+printf '%s\n' "$expanded_nonce_output" | grep -Fq 'shell expanded' || fail "missing heartbeat nonce output omitted the shell-expansion cause"
+printf '%s\n' "$expanded_nonce_output" | grep -Fq 'Pass a literal token instead' || fail "missing heartbeat nonce output omitted the literal-token remedy"
+if printf '%s\n' "$expanded_nonce_output" | grep -Fq 'did not observe this invocation'; then fail "missing heartbeat nonce used the differing-nonce wording"; fi
+
+literal_nonce_data=$tmp_dir/hook-literal-nonce
+literal_nonce_status=$literal_nonce_data/hook-status.json
+mkdir "$literal_nonce_data"
+literal_nonce_payload='{"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"literal-nonce-session","cwd":"/fixture","tool_input":{"command":"sh /path/check-hook-trust.sh --nonce liveness-abc123"}}'
+if ! hook_output=$(printf '%s' "$literal_nonce_payload" | PLUGIN_DATA="$literal_nonce_data" python3 "$review_hook"); then fail "literal nonce payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "literal nonce payload produced stdout"
+[ "$(jq -r '.nonce' "$literal_nonce_status")" = liveness-abc123 ] || fail "hook heartbeat did not record the literal nonce"
+
 nonce_payload='{"hook_event_name":"PreToolUse","tool_name":"Bash","session_id":"liveness-session","cwd":"/fixture","tool_input":{"command":"sh check-hook-trust.sh --data-dir /fixture --nonce abc-123"}}'
 if ! hook_output=$(printf '%s' "$nonce_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "nonce payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "nonce payload produced stdout"
@@ -274,9 +297,11 @@ if ! hook_output=$(printf '%s' "$nonce_payload" | PLUGIN_DATA="$liveness_data" p
 if ! active_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_data" --nonce abc-123); then fail "checker rejected a matching nonce"; fi
 [ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "matching nonce output did not start with HOOK ACTIVE"
 printf '%s\n' "$active_output" | grep -Fq 'produced by this invocation' || fail "matching nonce output omitted invocation proof"
-if inert_output=$(sh "$script_dir/check-hook-trust.sh" --nonce different-1 --data-dir "$liveness_data"); then fail "checker accepted a different nonce"; fi
+if inert_output=$(sh "$script_dir/check-hook-trust.sh" --nonce different-1 --data-dir "$liveness_data"); then fail "checker accepted a different nonce"; else inert_status=$?; fi
+[ "$inert_status" -eq 1 ] || fail "different nonce did not exit 1"
 [ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "different nonce output did not start with HOOK INERT"
 printf '%s\n' "$inert_output" | grep -Fq 'did not observe this invocation' || fail "different nonce output omitted the mismatch reason"
+if printf '%s\n' "$inert_output" | grep -Fq 'recorded no nonce'; then fail "different nonce used the missing-nonce wording"; fi
 if sh "$script_dir/check-hook-trust.sh" --data-dir "$liveness_data" --nonce 'bad;token' >/dev/null 2>&1; then fail "checker accepted a nonce containing a semicolon"; else nonce_status=$?; fi
 [ "$nonce_status" -eq 2 ] || fail "invalid nonce did not exit 2"
 if sh "$script_dir/check-hook-trust.sh" --nonce ab >/dev/null 2>&1; then fail "checker accepted a nonce shorter than four characters"; else nonce_status=$?; fi
@@ -289,7 +314,7 @@ if sh "$script_dir/check-hook-trust.sh" --unknown >/dev/null 2>&1; then fail "ch
 if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "second nonce-free payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "second nonce-free payload produced stdout"
 jq -e '(.nonce == null)' "$liveness_status" >/dev/null || fail "nonce-free heartbeat retained a nonce"
-pass "hook nonce capture and invocation-bound liveness checks"
+pass "hook nonce capture, shell-expansion diagnosis, and invocation-bound liveness checks"
 
 empty_data=$tmp_dir/hook-empty
 mkdir "$empty_data"

@@ -133,6 +133,14 @@ if age > 60:
     inert_common()
     raise SystemExit(1)
 
+if nonce and "nonce" not in heartbeat:
+    print("HOOK INERT")
+    print(f"Resolved data directory: {data_dir}")
+    print("The hook ran and wrote a heartbeat, but the heartbeat recorded no nonce.")
+    print("The usual cause is a nonce the shell expanded via $$, $( ), backticks, or a variable before the hook could see the literal command text.")
+    print("Pass a literal token instead: 4-64 characters of letters, digits, and _ . : -.")
+    raise SystemExit(1)
+
 if nonce and heartbeat.get("nonce") != nonce:
     print("HOOK INERT")
     print(f"Resolved data directory: {data_dir}")
