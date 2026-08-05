@@ -229,9 +229,10 @@ the architect's compliance is no longer what makes the budget hold.
 Budget: at most 3 final reviews per deliverable, meaning the first review plus at most 2
 re-reviews. Count every final review, including one that follows a `rethink`.
 
-The plugin's `PreToolUse` hook counts each final-review spawn and denies the fourth at
-the host level. The primary session does not maintain the count. The hook maintains
-`$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
+The plugin's `PreToolUse` hook counts each `tool_input.agent_type` equal to
+`sol_advisor_sol_reviewer`, regardless of the host-provided tool name, and denies the
+fourth at the host level. The primary session does not maintain the count. The hook
+maintains `$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
 deliverable has used. Denials are recorded in the same ledger. The
 `scripts/ledger-report.sh` helper summarizes how the budget is actually being used. Do
 not hand-edit the ledger.
@@ -314,9 +315,11 @@ Fields:
 - `attempts` counts specifications submitted to the final lane; `duration_s` is a rough
   wall-clock estimate, not a stopwatch reading.
 
-Append with a plain shell redirect -- no jq, no wrapper script:
+On first use, create the ledger parent and append with a plain shell redirect -- no jq,
+no wrapper script:
 
 ~~~sh
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/sol-advisor"
 printf '%s\n' '{"ts":"2026-08-05T10:00:00+09:00","task":"add retry to sync client","class":"implement","lane":"sol_advisor_terra_implementer","exception":null,"outcome":"success","attempts":1,"duration_s":540,"note":""}' >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
 ~~~
 

@@ -179,8 +179,9 @@ unresolved findings and options to the user instead of spawning another lane.
 ### Machine-enforced review budget
 
 The three-review budget is enforced by a `PreToolUse` hook shipped with the plugin, not
-by convention. The hook counts every spawn whose agent type is
-`sol_advisor_sol_reviewer` and exempts only a prompt carrying the literal
+by convention. The hook counts every `tool_input.agent_type` equal to
+`sol_advisor_sol_reviewer`, regardless of the host-provided tool name, and exempts only
+a prompt carrying the literal
 `COMMITMENT BOUNDARY` marker, so a consult stays outside the budget while a final review
 that forgets a line is still counted. The exemption is opt-in in that direction on
 purpose: the party composing the packet is the party with an incentive to keep
@@ -244,6 +245,12 @@ applied, and per stopped lane, appended to
 `$PLUGIN_DATA` reaches hook processes only, and outside this public repository because
 entries carry task descriptions. Without it the spawn floor in exception 2 and the cost
 of a completed delegation stay borrowed numbers rather than measured ones.
+Create the parent on first use before appending a record:
+
+~~~sh
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/sol-advisor"
+printf '%s\n' '<one routing JSON record>' >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
+~~~
 
 The spawn-floor number quoted in the skill measures a spawn, not a delegation. On the
 author's setup, a no-op spawn measured about 8.8 seconds wall clock, against a median

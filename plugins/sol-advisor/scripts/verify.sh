@@ -139,7 +139,7 @@ if ! hook_output=$(run_review_hook "$exec_payload"); then fail "exec payload did
 [ -z "$hook_output" ] || fail "exec payload produced stdout"
 test ! -e "$hook_ledger" || fail "exec payload created the review ledger"
 
-implementer_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_terra_implementer","message":"REVIEW CYCLE"}}'
+implementer_payload='{"hook_event_name":"PreToolUse","tool_name":"collaboration.spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_terra_implementer","message":"REVIEW CYCLE"}}'
 if ! hook_output=$(run_review_hook "$implementer_payload"); then fail "implementer payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "implementer payload produced stdout"
 test ! -e "$hook_ledger" || fail "implementer payload created the review ledger"
@@ -155,22 +155,29 @@ jq -s -e '
   and (.[0].cycle == null)
 ' "$hook_ledger" >/dev/null || fail "marked consult was not recorded as an uncounted consult"
 
-# The inversion: a reviewer spawn carrying no marker at all is still counted, so a
-# forgotten marker can never buy an unbounded review loop.
-unmarked_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Please review the accumulated diff."}}'
-if ! hook_output=$(run_review_hook "$unmarked_payload"); then fail "unmarked review did not exit 0"; fi
-[ -z "$hook_output" ] || fail "unmarked review produced stdout"
+# The host may namespace its tool name or omit it entirely. Reviewer identity comes
+# from the exact agent type, while other agent types remain ignored.
+namespaced_reviewer_payload='{"hook_event_name":"PreToolUse","tool_name":"collaboration.spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Please review the accumulated diff."}}'
+if ! hook_output=$(run_review_hook "$namespaced_reviewer_payload"); then fail "namespaced review did not exit 0"; fi
+[ -z "$hook_output" ] || fail "namespaced review produced stdout"
 jq -s -e '
   (map(select(.event == "review")) | length) == 1
   and (.[-1].event == "review")
   and (.[-1].cycle == 1)
-' "$hook_ledger" >/dev/null || fail "unmarked reviewer spawn was not counted against the budget"
+' "$hook_ledger" >/dev/null || fail "namespaced reviewer spawn was not counted against the budget"
+
+tool_name_absent_reviewer_payload='{"hook_event_name":"PreToolUse","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Please review the accumulated diff again."}}'
+if ! hook_output=$(run_review_hook "$tool_name_absent_reviewer_payload"); then fail "tool-name-absent review did not exit 0"; fi
+[ -z "$hook_output" ] || fail "tool-name-absent review produced stdout"
+jq -s -e '
+  (map(select(.event == "review")) | length) == 2
+  and (.[-1].event == "review")
+  and (.[-1].cycle == 2)
+' "$hook_ledger" >/dev/null || fail "tool-name-absent reviewer spawn was not counted against the budget"
 
 review_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"REVIEW CYCLE\nThis is a budgeted final review."}}'
-for cycle in 2 3; do
-  if ! hook_output=$(run_review_hook "$review_payload"); then fail "review cycle $cycle did not exit 0"; fi
-  [ -z "$hook_output" ] || fail "review cycle $cycle produced stdout"
-done
+if ! hook_output=$(run_review_hook "$review_payload"); then fail "review cycle 3 did not exit 0"; fi
+[ -z "$hook_output" ] || fail "review cycle 3 produced stdout"
 jq -s -e '
   length == 4
   and (map(.event) == ["consult", "review", "review", "review"])
@@ -370,8 +377,9 @@ jq -e '(.nonce == null)' "$liveness_status" >/dev/null || fail "nonce-free heart
 pass "hook nonce capture, shell-expansion diagnosis, and invocation-bound liveness checks"
 
 empty_data=$tmp_dir/hook-empty
+empty_data_codex_home=$tmp_dir/hook-empty-codex-home
 mkdir "$empty_data"
-if inert_output=$(sh "$script_dir/check-hook-trust.sh" --data-dir "$empty_data"); then fail "checker accepted a missing heartbeat"; fi
+if inert_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$empty_data_codex_home" sh "$script_dir/check-hook-trust.sh" --data-dir "$empty_data"); then fail "checker accepted a missing heartbeat"; fi
 [ "$(printf '%s\n' "$inert_output" | sed -n '1p')" = "HOOK INERT" ] || fail "missing heartbeat output did not start with HOOK INERT"
 
 stale_data=$tmp_dir/hook-stale
@@ -405,6 +413,29 @@ report_resolved=$(printf '%s\n' "$derived_ledger_output" | sed -n 's|^Resolved l
 [ "$checker_resolved" = "$report_resolved" ] || fail "checker and ledger reporter resolved different data directories"
 pass "shared hook and ledger-report data-directory resolution"
 
+checkout_name=checkout-layout
+checkout_script_dir=$tmp_dir/$checkout_name/plugins/sol-advisor/scripts
+checkout_codex_home=$tmp_dir/checkout-codex-home
+checkout_data=$checkout_codex_home/plugins/data/$checkout_name-sol-advisor
+mkdir -p "$checkout_script_dir" "$checkout_data"
+checkout_codex_home=$(CDPATH= cd "$checkout_codex_home" && pwd)
+checkout_data=$checkout_codex_home/plugins/data/$checkout_name-sol-advisor
+checkout_data=$(CDPATH= cd "$checkout_data" && pwd)
+cp "$script_dir/check-hook-trust.sh" "$checkout_script_dir/check-hook-trust.sh"
+cp "$data_dir_resolver" "$checkout_script_dir/resolve-data-dir.sh"
+cp "$ledger_report" "$checkout_script_dir/ledger-report.sh"
+cp "$liveness_status" "$checkout_data/hook-status.json"
+cp "$hook_ledger" "$checkout_data/review-budget.jsonl"
+if ! active_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$checkout_codex_home" sh "$checkout_script_dir/check-hook-trust.sh"); then fail "checkout checker rejected the installed data directory"; fi
+[ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "checkout checker output did not start with HOOK ACTIVE"
+printf '%s\n' "$active_output" | grep -Fq "$checkout_data" || fail "checkout checker did not resolve the installed data directory"
+if ! checkout_ledger_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$checkout_codex_home" sh "$checkout_script_dir/ledger-report.sh"); then fail "checkout ledger reporter rejected the installed data directory"; fi
+checkout_checker_resolved=$(printf '%s\n' "$active_output" | sed -n 's/^Resolved data directory: //p')
+checkout_report_resolved=$(printf '%s\n' "$checkout_ledger_output" | sed -n 's|^Resolved ledger: ||p' | sed 's|/review-budget.jsonl$||')
+[ "$checkout_checker_resolved" = "$checkout_data" ] || fail "checkout checker resolved the wrong data directory"
+[ "$checkout_report_resolved" = "$checkout_data" ] || fail "checkout ledger reporter resolved the wrong data directory"
+pass "checkout-layout hook and ledger-report data-directory resolution"
+
 fake_inert_script_dir=$tmp_dir/fake-inert/plugins/cache/mp/plug/9.9.9/scripts
 fake_inert_data=$tmp_dir/fake-inert/plugins/data/mp-plug
 fake_inert_codex_home=$tmp_dir/fake-inert-empty-codex-home
@@ -428,6 +459,17 @@ if ! active_output=$(PLUGIN_DATA="$exported_data" sh "$script_dir/check-hook-tru
 [ "$(printf '%s\n' "$active_output" | sed -n '1p')" = "HOOK ACTIVE" ] || fail "--data-dir precedence output did not start with HOOK ACTIVE"
 printf '%s\n' "$active_output" | grep -Fq "$override_data" || fail "--data-dir precedence output named the wrong data directory"
 pass "hook liveness, derived data resolution, precedence, read-only behavior, and trust-checker outcomes"
+
+routing_codex_home=$tmp_dir/routing-codex-home
+routing_ledger=$routing_codex_home/sol-advisor/routing.jsonl
+routing_record='{"ts":"2026-08-05T10:00:00+09:00","task":"fixture","class":"implement","lane":"sol_advisor_terra_implementer","exception":null,"outcome":"success","attempts":1,"duration_s":1,"note":""}'
+if ! env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$routing_codex_home" sh -c '
+  mkdir -p "${CODEX_HOME:-$HOME/.codex}/sol-advisor"
+  printf "%s\\n" "$1" >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
+' sh "$routing_record"; then fail "documented routing-ledger first-use sequence failed"; fi
+test -d "$routing_codex_home/sol-advisor" || fail "routing-ledger first-use sequence did not create its parent"
+jq -s -e --argjson record "$routing_record" 'length == 1 and .[0] == $record' "$routing_ledger" >/dev/null || fail "routing-ledger first-use sequence did not write one valid record"
+pass "routing-ledger first-use sequence creates its parent and writes one record"
 
 python3 - "$templates" <<'PY'
 from pathlib import Path

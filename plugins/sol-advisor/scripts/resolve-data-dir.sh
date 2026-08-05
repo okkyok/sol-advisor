@@ -52,6 +52,22 @@ resolve_data_dir() {
   fi
 
   if [ "$resolved_data_file_found" -eq 0 ]; then
+    # A repository checkout has the stable shape
+    # <checkout-root>/plugins/<plugin>/scripts. Its plugin data remains in the
+    # installed marketplace data directory, named after the checkout root.
+    if [ -n "${resolve_data_dir_plugin_root:-}" ]; then
+      resolve_data_dir_plugins_dir=$(dirname "$resolve_data_dir_plugin_root")
+      if [ "$(basename "$resolve_data_dir_plugins_dir")" = plugins ]; then
+        resolve_data_dir_checkout_root=$(dirname "$resolve_data_dir_plugins_dir")
+        resolve_data_dir_checkout=$(basename "$resolve_data_dir_checkout_root")
+        resolve_data_dir_plugin_name=$(basename "$resolve_data_dir_plugin_root")
+        resolve_data_dir_checkout_candidate="${CODEX_HOME:-$HOME/.codex}/plugins/data/$resolve_data_dir_checkout-$resolve_data_dir_plugin_name"
+        resolve_data_dir_consider "$resolve_data_dir_checkout_candidate"
+      fi
+    fi
+  fi
+
+  if [ "$resolved_data_file_found" -eq 0 ]; then
     resolve_data_dir_consider "${CODEX_HOME:-$HOME/.codex}/sol-advisor"
   fi
 }

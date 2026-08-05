@@ -54,8 +54,6 @@ def main():
 
         if payload.get("hook_event_name") != "PreToolUse":
             return
-        if payload.get("tool_name") != "spawn_agent":
-            return
 
         tool_input = payload.get("tool_input")
         if not isinstance(tool_input, dict):
