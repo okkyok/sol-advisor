@@ -1,10 +1,10 @@
 {
   "name": "sol-advisor",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Codex-native architect workflow with role-pinned Terra / High and Luna / Medium implementation lanes and a budgeted, fresh requested-read-only Sol review.",
   "author": {"name": "Daniel McAteer", "url": "https://github.com/DannyMac180"},
-  "homepage": "https://github.com/DannyMac180/sol-advisor#readme",
-  "repository": "https://github.com/DannyMac180/sol-advisor",
+  "homepage": "https://github.com/okkyok/sol-advisor#readme",
+  "repository": "https://github.com/okkyok/sol-advisor",
   "license": "MIT",
   "keywords": ["codex", "orchestration", "multi-agent", "gpt-5.6"],
   "skills": "./skills/",
@@ -16,7 +16,7 @@
     "developerName": "Daniel McAteer",
     "category": "Productivity",
     "capabilities": ["Interactive", "Write"],
-    "websiteURL": "https://github.com/DannyMac180/sol-advisor",
+    "websiteURL": "https://github.com/okkyok/sol-advisor",
     "defaultPrompt": ["Use Sol Advisor to build this feature and verify it before completion.", "Classify this task with Sol Advisor and route it to the right implementation lane.", "Review this deliverable with a fresh Sol advisor before reporting done."]
   }
 }

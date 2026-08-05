@@ -111,7 +111,7 @@ for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.6.3 ] || fail "manifest version is not 0.6.3"
+[ "$(jq -r '.version' "$manifest")" = 0.7.0 ] || fail "manifest version is not 0.7.0"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
 
@@ -144,21 +144,38 @@ if ! hook_output=$(run_review_hook "$implementer_payload"); then fail "implement
 [ -z "$hook_output" ] || fail "implementer payload produced stdout"
 test ! -e "$hook_ledger" || fail "implementer payload created the review ledger"
 
-consult_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Commitment-boundary consult"}}'
+consult_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"COMMITMENT BOUNDARY\nPre-implementation consult."}}'
 if ! hook_output=$(run_review_hook "$consult_payload"); then fail "consult payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "consult payload produced stdout"
-test ! -e "$hook_ledger" || fail "consult payload created the review ledger"
+jq -s -e '
+  length == 1
+  and (.[0].event == "consult")
+  and (.[0].session_id == "budget-session")
+  and (.[0].used == 0)
+  and (.[0].cycle == null)
+' "$hook_ledger" >/dev/null || fail "marked consult was not recorded as an uncounted consult"
+
+# The inversion: a reviewer spawn carrying no marker at all is still counted, so a
+# forgotten marker can never buy an unbounded review loop.
+unmarked_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Please review the accumulated diff."}}'
+if ! hook_output=$(run_review_hook "$unmarked_payload"); then fail "unmarked review did not exit 0"; fi
+[ -z "$hook_output" ] || fail "unmarked review produced stdout"
+jq -s -e '
+  (map(select(.event == "review")) | length) == 1
+  and (.[-1].event == "review")
+  and (.[-1].cycle == 1)
+' "$hook_ledger" >/dev/null || fail "unmarked reviewer spawn was not counted against the budget"
 
 review_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"REVIEW CYCLE\nThis is a budgeted final review."}}'
-for cycle in 1 2 3; do
+for cycle in 2 3; do
   if ! hook_output=$(run_review_hook "$review_payload"); then fail "review cycle $cycle did not exit 0"; fi
   [ -z "$hook_output" ] || fail "review cycle $cycle produced stdout"
 done
 jq -s -e '
-  length == 3
-  and (map(.event) == ["review", "review", "review"])
-  and (map(.session_id) == ["budget-session", "budget-session", "budget-session"])
-  and (map(.cycle) == [1, 2, 3])
+  length == 4
+  and (map(.event) == ["consult", "review", "review", "review"])
+  and (map(.session_id) | unique == ["budget-session"])
+  and (map(select(.event == "review")) | map(.cycle) == [1, 2, 3])
 ' "$hook_ledger" >/dev/null || fail "first three review cycles were not recorded exactly"
 
 if ! hook_output=$(run_review_hook "$review_payload"); then fail "fourth review did not exit 0"; fi
@@ -183,11 +200,47 @@ jq -s -e '
 ' "$hook_ledger" >/dev/null || fail "repeated denial inflated the review count"
 pass "review denials are recorded without inflating the review budget"
 
+# Relabelling an exhausted deliverable's final review as a consult is the one move the
+# exemption makes possible, so it must leave a trace the reader reports.
+if ! hook_output=$(run_review_hook "$consult_payload"); then fail "post-denial consult did not exit 0"; fi
+[ -z "$hook_output" ] || fail "post-denial consult produced stdout"
+jq -s -e '
+  (map(select(.event == "review")) | length) == 3
+  and (.[-1].event == "consult")
+  and (.[-1].used == 3)
+' "$hook_ledger" >/dev/null || fail "post-denial consult was counted or not recorded"
+
 if ! ledger_output=$(sh "$ledger_report" --data-dir "$hook_data"); then fail "ledger report rejected the budget ledger"; fi
 printf '%s\n' "$ledger_output" | grep -Fq 'Deliverables: 1' || fail "ledger report did not count one deliverable"
 printf '%s\n' "$ledger_output" | grep -Fq '3 cycles=1' || fail "ledger report did not count three used cycles"
 printf '%s\n' "$ledger_output" | grep -Fq 'Deliverables that hit the cap: 1' || fail "ledger report did not count one cap hit"
 printf '%s\n' "$ledger_output" | grep -Fq 'scope freezing is not working' || fail "ledger report omitted the cap-hit verdict"
+printf '%s\n' "$ledger_output" | grep -Fq 'Exempt consults: 2' || fail "ledger report did not count exempt consults"
+printf '%s\n' "$ledger_output" | grep -Fq 'Bypass signatures after a denial: 1 (reset=0, consult=1)' || fail "ledger report did not detect the post-denial consult"
+printf '%s\n' "$ledger_output" | grep -Fq 'routed around' || fail "ledger report omitted the bypass verdict"
+
+bypass_reset_data=$tmp_dir/bypass-reset
+mkdir "$bypass_reset_data"
+printf '%s\n' \
+  '{"event":"review","session_id":"s","cycle":1}' \
+  '{"event":"review","session_id":"s","cycle":2}' \
+  '{"event":"review","session_id":"s","cycle":3}' \
+  '{"event":"denied","session_id":"s","cycle":4}' \
+  '{"event":"new-deliverable","session_id":"s"}' \
+  > "$bypass_reset_data/review-budget.jsonl"
+if ! bypass_output=$(sh "$ledger_report" --data-dir "$bypass_reset_data"); then fail "ledger report rejected the bypass fixture"; fi
+printf '%s\n' "$bypass_output" | grep -Fq 'Bypass signatures after a denial: 1 (reset=1, consult=0)' || fail "ledger report did not detect a reset immediately after a denial"
+
+clean_reset_data=$tmp_dir/clean-reset
+mkdir "$clean_reset_data"
+printf '%s\n' \
+  '{"event":"review","session_id":"s","cycle":1}' \
+  '{"event":"new-deliverable","session_id":"s"}' \
+  '{"event":"review","session_id":"s","cycle":1}' \
+  > "$clean_reset_data/review-budget.jsonl"
+if ! clean_output=$(sh "$ledger_report" --data-dir "$clean_reset_data"); then fail "ledger report rejected the clean-reset fixture"; fi
+printf '%s\n' "$clean_output" | grep -Fq 'Bypass signatures after a denial: 0 (reset=0, consult=0)' || fail "ledger report flagged a reset that did not follow a denial"
+printf '%s\n' "$clean_output" | grep -Fq 'does not show any budget warning condition' || fail "ledger report warned on a clean ledger"
 
 empty_ledger_data=$tmp_dir/empty-ledger
 mkdir "$empty_ledger_data"
@@ -560,6 +613,16 @@ forbidden_terra='sol_advisor_terra_'"max"
 forbidden_file='sol-advisor-terra-'"max"
 if rg -n "$forbidden_terra|$forbidden_file" "$readme" "$plugin_dir"; then fail "forbidden second Terra role remains"; fi
 pass "three-lane documentation and no per-spawn overrides"
+
+grep -Fq 'COMMITMENT BOUNDARY' "$review_hook" || fail "hook no longer recognizes the consult exemption marker"
+if grep -Fq 'REVIEW CYCLE' "$review_hook"; then fail "hook still gates the budget on a marker the final review must remember"; fi
+for document in "$skill" "$contracts" "$readme"; do
+  grep -Fq 'COMMITMENT BOUNDARY' "$document" || fail "consult exemption marker is undocumented in $document"
+done
+grep -Fq 'routing.jsonl' "$skill" || fail "skill is missing the routing ledger"
+grep -Fq 'sol-advisor/routing.jsonl' "$readme" || fail "README does not point at the routing ledger"
+if grep -Fq 'Resets outnumber deliverables' "$ledger_report"; then fail "ledger report retains the unreachable reset comparison"; fi
+pass "inverted marker contract and routing ledger documentation"
 grep -Fq 'sol_advisor_luna_committer' "$preflight" || fail "preflight is missing sol_advisor_luna_committer"
 for role in sol_advisor_terra_implementer sol_advisor_sol_reviewer sol_advisor_luna_committer; do
   grep -Fq "$role" "$preflight" || fail "preflight is missing required role: $role"

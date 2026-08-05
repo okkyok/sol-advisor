@@ -183,9 +183,10 @@ DEFERRED: <out-of-scope observations that must not trigger another fix cycle, or
 RESIDUAL RISK: <most important remaining risk, or none>
 ~~~
 
-The `REVIEW CYCLE` line is required in every final-review packet because the shipped hook
-keys the budget off that marker. A commitment-boundary consult must not carry the marker
-or it will consume final-review budget.
+The `REVIEW CYCLE` line tells the reviewer which cycle it is in; the budget no longer
+depends on it. The shipped hook counts every `sol_advisor_sol_reviewer` spawn and exempts
+only a packet carrying the literal `COMMITMENT BOUNDARY` marker, so a final review that
+forgets a line is still counted. Never put that marker in a final-review packet.
 
 If any fix is made after review, discard the verdict and run a new fresh review inside
 the review budget. That budget is at most 3 final reviews per deliverable, tracked by the
@@ -214,3 +215,15 @@ Give it the proposed decision, goal, constraints, relevant paths, alternatives, 
 one question that changes the plan. Require `proceed`, `change`, or `stop`, plus the
 decisive reason and largest risk. Apply the same preflight, runtime-observation,
 sandbox-reporting, and no-fallback rules.
+
+Open the packet with the exemption marker, on its own line, so the consult does not
+consume final-review budget:
+
+~~~text
+COMMITMENT BOUNDARY
+This is a pre-implementation consult, not a final review of a completed change set.
+~~~
+
+The hook records the exempt spawn as a `consult` entry. Omitting the marker costs one
+review cycle; putting it in a final-review packet is a bypass, and a consult that
+immediately follows a denial is reported as one by `scripts/ledger-report.sh`.

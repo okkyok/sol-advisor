@@ -56,8 +56,12 @@ for line in ledger_path.read_text(encoding="utf-8", errors="replace").splitlines
 
 deliverables_by_session = {}
 session_order = []
+previous_event_by_session = {}
 reset_count = 0
 reset_sessions = set()
+consult_count = 0
+bypass_reset = 0
+bypass_consult = 0
 for record in records:
     session_id = record.get("session_id")
     session_key = json.dumps(session_id, sort_keys=True, separators=(",", ":"))
@@ -71,6 +75,17 @@ for record in records:
     if event == "new-deliverable":
         reset_count += 1
         reset_sessions.add(session_key)
+    if event == "consult":
+        consult_count += 1
+    # A denial is the stop condition firing. Whatever the session does next in
+    # the same session is the only place a bypass can show up: a reset that
+    # restarts the budget, or a final review relabelled as an exempt consult.
+    if previous_event_by_session.get(session_key) == "denied":
+        if event == "new-deliverable":
+            bypass_reset += 1
+        elif event == "consult":
+            bypass_consult += 1
+    previous_event_by_session[session_key] = event
 
 deliverables = [
     deliverable
@@ -94,6 +109,8 @@ print(f"Deliverables: {deliverable_count}")
 print(f"Cycles used: 1 cycle={cycles.count(1)}, 2 cycles={cycles.count(2)}, 3 cycles={cycles.count(3)}")
 print(f"Deliverables that hit the cap: {cap_hits} ({cap_rate:.1f}%)")
 print(f"New-deliverable records: {reset_count} from {len(reset_sessions)} distinct session_ids")
+print(f"Exempt consults: {consult_count}")
+print(f"Bypass signatures after a denial: {bypass_reset + bypass_consult} (reset={bypass_reset}, consult={bypass_consult})")
 print("Verdict:")
 if not records:
     print("- No data yet, the budget has never been exercised.")
@@ -102,8 +119,8 @@ else:
     if cap_rate > 25.0:
         print("- The cap-hit rate is above 25%; scope freezing is not working and the finding set keeps growing.")
         warned = True
-    if reset_count > deliverable_count:
-        print("- Resets outnumber deliverables; the budget is being routed around rather than respected.")
+    if bypass_reset + bypass_consult > 0:
+        print("- A denial was followed immediately by a reset or an exempt consult; the budget is being routed around rather than respected.")
         warned = True
     if not warned:
-        print("- The ledger does not show either budget warning condition.")' "$ledger_path"
+        print("- The ledger does not show any budget warning condition.")' "$ledger_path"

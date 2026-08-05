@@ -179,9 +179,14 @@ unresolved findings and options to the user instead of spawning another lane.
 ### Machine-enforced review budget
 
 The three-review budget is enforced by a `PreToolUse` hook shipped with the plugin, not
-by convention. The hook counts a spawn only when its agent type is
-`sol_advisor_sol_reviewer` and its prompt contains the literal `REVIEW CYCLE` marker, so
-commitment-boundary consults remain outside the budget. It stores the session-keyed,
+by convention. The hook counts every spawn whose agent type is
+`sol_advisor_sol_reviewer` and exempts only a prompt carrying the literal
+`COMMITMENT BOUNDARY` marker, so a consult stays outside the budget while a final review
+that forgets a line is still counted. The exemption is opt-in in that direction on
+purpose: the party composing the packet is the party with an incentive to keep
+reviewing, so a forgotten marker must cost a cycle rather than grant an unbounded loop.
+Exempt spawns are written to the ledger as `consult` entries, which makes relabelling a
+final review as a consult auditable instead of invisible. It stores the session-keyed,
 auditable ledger at `$PLUGIN_DATA/review-budget.jsonl`; a new-deliverable record resets
 the count for a genuinely new deliverable in the same session. The hook fails open by
 design, so malformed input or an internal bug can never block a Codex session. Codex asks
@@ -197,8 +202,9 @@ The hook reads the command text before the shell expands it, so `$$`, `$(...)`,
 backticks, or a variable in the nonce are invisible to the hook and produce a false
 `HOOK INERT`. A check without a nonce is reported as unverified. Denied fourth and
 later reviews are now recorded in the ledger without increasing the review count. Run
-`scripts/ledger-report.sh` to summarize cycles, cap hits, resets, and whether the ledger
-suggests the review scope is still growing. The hook deliberately has no `matcher` in
+`scripts/ledger-report.sh` to summarize cycles, cap hits, resets, exempt consults, and
+whether the ledger suggests the review scope is still growing or the budget is being
+routed around. The hook deliberately has no `matcher` in
 `hooks.json`: narrowing it would hide the heartbeat from ordinary tool calls and
 destroy the liveness check.
 
@@ -225,10 +231,19 @@ sh "$plugin_dir/scripts/ledger-report.sh"
 
 Three things are worth arguing with. A cap-hit rate above 25% means cycle 1 is not
 producing the complete finding set, so freeze scope harder rather than raising the
-budget. More resets than deliverables means the budget is being routed around; the
-records name the sessions, so the pattern is checkable rather than deniable. And a
-cycle distribution concentrated at 1 means the budget is not the binding constraint at
-all, and the interesting question moved elsewhere.
+budget. A non-zero bypass count means the budget is being routed around: the report
+counts only the two moves that can actually evade it, a reset or an exempt consult
+recorded immediately after a denial in the same session, so the pattern is checkable
+rather than deniable. And a cycle distribution concentrated at 1 means the budget is not
+the binding constraint at all, and the interesting question moved elsewhere.
+
+The review ledger sees reviews and nothing else, so it cannot answer where the work went.
+The skill's routing ledger covers that: one JSON line per delegation, per exception
+applied, and per stopped lane, appended to
+`${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl` — under `CODEX_HOME` because
+`$PLUGIN_DATA` reaches hook processes only, and outside this public repository because
+entries carry task descriptions. Without it the spawn floor in exception 2 and the cost
+of a completed delegation stay borrowed numbers rather than measured ones.
 
 The spawn-floor number quoted in the skill measures a spawn, not a delegation. On the
 author's setup, a no-op spawn measured about 8.8 seconds wall clock, against a median

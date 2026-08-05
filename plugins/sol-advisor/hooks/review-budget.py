@@ -34,7 +34,7 @@ def main():
                 .isoformat()
                 .replace("+00:00", "Z"),
                 "session_id": payload.get("session_id"),
-                "plugin_version": "0.6.3",
+                "plugin_version": "0.7.0",
             }
             tool_input_text = json.dumps(
                 payload.get("tool_input"), separators=(",", ":"), ensure_ascii=False
@@ -63,9 +63,13 @@ def main():
         if tool_input.get("agent_type") != "sol_advisor_sol_reviewer":
             return
 
+        # Every reviewer spawn counts unless it is explicitly marked as a
+        # commitment-boundary consult. The exemption is opt-in on purpose: a
+        # forgotten marker costs one review cycle, while the reverse default
+        # would let a forgotten marker grant an unbounded review loop to the
+        # one party with an incentive to keep reviewing.
         message = tool_input.get("message", "")
-        if not isinstance(message, str) or "REVIEW CYCLE" not in message:
-            return
+        exempt = isinstance(message, str) and "COMMITMENT BOUNDARY" in message
 
         data_dir = os.environ.get("PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA")
         if not data_dir:
@@ -99,6 +103,35 @@ def main():
                 for record in session_records[last_reset + 1 :]
             )
 
+            def append_record(record):
+                ledger.seek(0, os.SEEK_END)
+                if contents and not contents.endswith(("\n", "\r")):
+                    ledger.write("\n")
+                ledger.write(json.dumps(record, separators=(",", ":")) + "\n")
+                ledger.flush()
+
+            def stamped(event, **fields):
+                record = {
+                    "ts": datetime.datetime.now(datetime.timezone.utc)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                    "event": event,
+                    "session_id": session_id,
+                    "cwd": payload.get("cwd", ""),
+                }
+                record.update(fields)
+                return record
+
+            if exempt:
+                # Recorded, not counted. An exempt spawn right after a denial is
+                # the signature of a final review relabelled as a consult, and
+                # ledger-report.sh reports it.
+                try:
+                    append_record(stamped("consult", used=count))
+                except BaseException:
+                    pass
+                return
+
             if count >= 3:
                 reset_record = json.dumps(
                     {"event": "new-deliverable", "session_id": session_id},
@@ -120,22 +153,7 @@ def main():
                     f"{reset_command}"
                 )
                 try:
-                    ledger.seek(0, os.SEEK_END)
-                    if contents and not contents.endswith(("\n", "\r")):
-                        ledger.write("\n")
-                    denied_record = {
-                        "ts": datetime.datetime.now(datetime.timezone.utc)
-                        .isoformat()
-                        .replace("+00:00", "Z"),
-                        "event": "denied",
-                        "session_id": session_id,
-                        "cwd": payload.get("cwd", ""),
-                        "cycle": count + 1,
-                    }
-                    ledger.write(
-                        json.dumps(denied_record, separators=(",", ":")) + "\n"
-                    )
-                    ledger.flush()
+                    append_record(stamped("denied", cycle=count + 1))
                 except BaseException:
                     pass
                 print(
@@ -152,20 +170,7 @@ def main():
                 )
                 return
 
-            ledger.seek(0, os.SEEK_END)
-            if contents and not contents.endswith(("\n", "\r")):
-                ledger.write("\n")
-            record = {
-                "ts": datetime.datetime.now(datetime.timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z"),
-                "event": "review",
-                "session_id": session_id,
-                "cwd": payload.get("cwd", ""),
-                "cycle": count + 1,
-            }
-            ledger.write(json.dumps(record, separators=(",", ":")) + "\n")
-            ledger.flush()
+            append_record(stamped("review", cycle=count + 1))
     except BaseException:
         return
 

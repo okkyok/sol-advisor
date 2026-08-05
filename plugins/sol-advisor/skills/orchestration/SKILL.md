@@ -184,6 +184,10 @@ The role pins Sol / High and requests read-only isolation. Omit per-spawn model 
 reasoning fields. Observe actual routing, sandbox, and permission metadata. The
 primary session remains responsible for the decision.
 
+Open the consult packet with the literal `COMMITMENT BOUNDARY` marker. Without it the
+consult consumes one of the deliverable's three final-review cycles, which is the safe
+direction to fail but still a cost worth avoiding.
+
 ## Require the final Sol review
 
 After implementation and parent verification, always spawn a new, fresh reviewer:
@@ -237,10 +241,16 @@ Before the first final review, run the preflight's hook-liveness check at
 INERT` means the budget is prose again; report that plainly in the final report rather
 than assuming enforcement.
 
-The marker contract is load-bearing. Every final-review packet MUST contain a
-`REVIEW CYCLE` section or the hook will not count it and the budget silently will not
-apply. A commitment-boundary consult MUST NOT contain that marker or it will consume
-budget it should not.
+The marker contract fails safe. Every spawn of `sol_advisor_sol_reviewer` consumes a
+cycle unless its packet carries the literal `COMMITMENT BOUNDARY` marker, which exempts
+a commitment-boundary consult. Forgetting the marker on a consult costs one review
+cycle; no omission anywhere grants an unbounded review loop. The exemption is opt-in
+precisely because the party composing the packet is the party with an incentive to keep
+reviewing.
+
+Exempt spawns are recorded as `consult` entries rather than dropped, so relabelling a
+final review as a consult is auditable instead of invisible: `ledger-report.sh` reports
+an exempt consult or a reset that immediately follows a denial as a bypass signature.
 
 The budget is keyed to the session and belongs to the deliverable. Never reset it because
 context was compacted, the specification was corrected, the architecture was revised,
@@ -270,3 +280,46 @@ findings, and the options you see, then ask the user which to take.
 
 A hook denial is not an error to route around; it is this stop condition firing. Hand the
 unresolved findings, current evidence, and options to the user.
+
+## Routing ledger
+
+The review-budget ledger only sees reviews. Every other number this doctrine relies on --
+the spawn floor in exception 2, the cost of a completed delegation, how often the floor
+lane is misrouted -- is currently uncollected, which means the routing rules above are
+calibrated from one author's measurements rather than from this installation's. Fix that
+by appending one JSON line to `${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl` at
+each of these moments:
+
+- a delegated task reaches its final outcome (verified, re-specified, or abandoned);
+- a task is kept in the primary session under one of the five exceptions -- these entries
+  are what make an exception-2 claim checkable instead of a feeling;
+- a lane is stopped by preflight, an unobservable pin, or the failure ladder.
+
+The ledger lives under `CODEX_HOME`, not `$PLUGIN_DATA`: that variable reaches hook
+processes only, never the primary session's shell. It is also outside the plugin
+repository, which is public, because entries carry task descriptions.
+
+Fields:
+
+~~~json
+{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_terra_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
+~~~
+
+- `lane: "architect"` with `exception: 1-5` records work kept in the primary session, and
+  `duration_s` is the actual time it took, so an exception-2 claim can be compared with
+  the measured spawn floor rather than accepted.
+- `outcome: "spec-retry"` is the first-failure re-specification; name the gap in `note`.
+  `"reclassified"` is a floor-lane task that returned blocked and moved to Terra.
+  `"stopped"` is the failure ladder or a preflight refusal ending the objective.
+- `attempts` counts specifications submitted to the final lane; `duration_s` is a rough
+  wall-clock estimate, not a stopwatch reading.
+
+Append with a plain shell redirect -- no jq, no wrapper script:
+
+~~~sh
+printf '%s\n' '{"ts":"2026-08-05T10:00:00+09:00","task":"add retry to sync client","class":"implement","lane":"sol_advisor_terra_implementer","exception":null,"outcome":"success","attempts":1,"duration_s":540,"note":""}' >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
+~~~
+
+A read-only sandbox refuses that write. Report the refusal rather than dropping the entry
+silently; an unlogged delegation is invisible to the next retro. Keep it to one line per
+outcome -- the ledger records decisions, not narration.
