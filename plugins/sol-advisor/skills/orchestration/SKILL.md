@@ -1,13 +1,13 @@
 ---
 name: orchestration
-description: "Codex-native architect and delegation workflow using separately installed custom agents: a GPT-5.6 Terra implementer at high reasoning, a GPT-5.6 Luna floor lane at medium reasoning for mechanical edits, and a fresh GPT-5.6 Sol reviewer at high reasoning with a requested read-only profile. Use for classifying a task and choosing a lane, delegated implementation, multi-task builds, features, bug fixes, refactors, migrations, five-part implementation specs, parent verification, commitment-boundary advice, and the budgeted final Sol review."
+description: "Codex-native architect and delegation workflow using separately installed custom agents: a GPT-5.6 Luna implementer at max reasoning, a GPT-5.6 Luna floor lane at medium reasoning for mechanical edits, and a fresh GPT-5.6 Sol reviewer at high reasoning with a requested read-only profile. Use for classifying a task and choosing a lane, delegated implementation, multi-task builds, features, bug fixes, refactors, migrations, five-part implementation specs, parent verification, commitment-boundary advice, and the budgeted final Sol review."
 ---
 
 # Sol Advisor Orchestration
 
 Act as the architect. Own the user's intent, architecture, decomposition, complete
 implementation specification, parent verification, and final acceptance. Delegate all
-implementation to the native Terra / High role, then require a fresh Sol verdict before
+implementation to the native Luna / Max role, then require a fresh Sol verdict before
 reporting the deliverable complete. These are native Codex custom-agent threads, not a
 nested Codex CLI wrapper or a global default-subagent setting.
 
@@ -17,7 +17,7 @@ session.
 
 ## What this workflow optimizes
 
-The primary Sol / High session is the scarcest resource in this workflow. Its output
+The primary Sol / Medium session is the scarcest resource in this workflow. Its output
 is decomposition, specifications, routing decisions, verdicts on evidence, and short
 reports, not implementation text.
 
@@ -33,10 +33,10 @@ order.
 
 ## Confirm the primary session
 
-Run the primary Codex session on gpt-5.6-sol with high reasoning. Verify the current
+Run the primary Codex session on gpt-5.6-sol with medium reasoning. Verify the current
 model and effort when runtime metadata exposes them. If either differs, tell the user
-to select Sol / High and stop before delegation. If runtime metadata does not expose
-them, ask the user to confirm Sol / High and stop until confirmed. A skill cannot
+to select Sol / Medium and stop before delegation. If runtime metadata does not expose
+them, ask the user to confirm Sol / Medium and stop until confirmed. A skill cannot
 change the primary model itself; never assume or claim this prerequisite is satisfied.
 
 ## Preflight the companion custom agents
@@ -58,7 +58,7 @@ Keep these responsibilities in the primary session:
 - Judge reviewer feedback and accept the deliverable.
 
 Do not type implementation code, tests, boilerplate, or mechanical configuration in
-the primary session when the Terra lane can do it. If its result is wrong, correct the
+the primary session when the Luna implementation lane can do it. If its result is wrong, correct the
 specification and delegate the fix. Do not silently repair a failed worker patch.
 
 ## Classify the task and choose the lane
@@ -70,11 +70,11 @@ exceptions below.
 | Class | Definition | Default lane |
 |---|---|---|
 | commit | A trivial, fully-determined edit: a typo, one-line fix, version bump, config value, or one known pattern applied across many files. | The floor lane. |
-| implement | Write or edit code, tests, or config against a specification. | Terra / High |
-| explore | Read or search the codebase or history to answer a question. | Terra / High |
-| ingest | Absorb external material (docs, logs, large files) into usable form. | Terra / High |
+| implement | Write or edit code, tests, or config against a specification. | Luna / Max |
+| explore | Read or search the codebase or history to answer a question. | Luna / Max |
+| ingest | Absorb external material (docs, logs, large files) into usable form. | Luna / Max |
 | review | Judge a completed change set against a stated goal. | Fresh Sol reviewer |
-| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Terra / High, after a commitment-boundary Sol consult |
+| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Luna / Max, after a commitment-boundary Sol consult |
 
 The floor lane's name is `sol_advisor_luna_committer`.
 
@@ -85,13 +85,13 @@ fork_turns: none
 
 The installed role pins GPT-5.6 Luna at medium reasoning. Per-spawn model and reasoning
 fields are omitted. Work that turns out to need judgment comes back as blocked and is
-re-routed to Terra rather than being finished in the floor lane.
+re-routed to the Luna implementation lane rather than being finished in the floor lane.
 
-There is no lane above Terra. A `hardest` task gets a commitment-boundary Sol consult
+There is no lane above Luna. A `hardest` task gets a commitment-boundary Sol consult
 before implementation, not an escalation after it fails.
 
 The deciding rule: how much of the outcome does the specification determine? Fully and
-mechanically, route to the floor lane. Otherwise, route to Terra. Judgment about
+mechanically, route to the floor lane. Otherwise, route to Luna. Judgment about
 architecture, interfaces, hypotheses, and evidence never leaves the primary session,
 because that judgment is the architect's own work, not a lane's.
 
@@ -114,7 +114,7 @@ Keep work in the primary session only for one of these five named reasons:
 These exceptions are a checklist applied after classifying a task, not a licence to
 skip classification.
 
-## Route implementation through Terra / High
+## Route implementation through Luna / Max
 
 Use the same role for routine features, mechanical edits, difficult debugging,
 security-sensitive work, non-trivial algorithms, and broad refactors. There is no
@@ -123,11 +123,11 @@ second implementation or fallback lane.
 Spawn exactly:
 
 ~~~text
-agent_type: sol_advisor_terra_implementer
+agent_type: sol_advisor_luna_implementer
 fork_turns: none
 ~~~
 
-The installed role pins GPT-5.6 Terra at high reasoning. Omit per-spawn model and
+The installed role pins GPT-5.6 Luna at max reasoning. Omit per-spawn model and
 reasoning fields. Confirm role, model, and effort using the public-details-first
 procedure before accepting work.
 
@@ -147,7 +147,7 @@ Routing rules:
 - There is no third delegation of the same objective. Report the situation to the
   user instead.
 - A floor-lane task that returns blocked is a routing error, not a lane failure.
-  Re-classify it and send it to Terra with the gap named; it does not consume a step
+  Re-classify it and send it to Luna with the gap named; it does not consume a step
   of the first-failure/second-failure delegation ladder.
 - Never silently substitute a role, model, or reasoning level.
 
@@ -221,7 +221,7 @@ Apply the observed sandbox policy:
 
 ## Bound the review loop
 
-The final review is budgeted. Unbounded, `fix-first` -> Terra fix -> fresh review repeats
+The final review is budgeted. Unbounded, `fix-first` -> Luna fix -> fresh review repeats
 until the task is interrupted, because a reviewer with a fresh context can always find
 something new. Termination is the architect's responsibility, not the reviewer's, but
 the architect's compliance is no longer what makes the budget hold.
@@ -303,14 +303,14 @@ repository, which is public, because entries carry task descriptions.
 Fields:
 
 ~~~json
-{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_terra_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
+{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_luna_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
 ~~~
 
 - `lane: "architect"` with `exception: 1-5` records work kept in the primary session, and
   `duration_s` is the actual time it took, so an exception-2 claim can be compared with
   the measured spawn floor rather than accepted.
 - `outcome: "spec-retry"` is the first-failure re-specification; name the gap in `note`.
-  `"reclassified"` is a floor-lane task that returned blocked and moved to Terra.
+  `"reclassified"` is a floor-lane task that returned blocked and moved to Luna.
   `"stopped"` is the failure ladder or a preflight refusal ending the objective.
 - `attempts` counts specifications submitted to the final lane; `duration_s` is a rough
   wall-clock estimate, not a stopwatch reading.
@@ -320,7 +320,7 @@ no wrapper script:
 
 ~~~sh
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/sol-advisor"
-printf '%s\n' '{"ts":"2026-08-05T10:00:00+09:00","task":"add retry to sync client","class":"implement","lane":"sol_advisor_terra_implementer","exception":null,"outcome":"success","attempts":1,"duration_s":540,"note":""}' >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
+printf '%s\n' '{"ts":"2026-08-05T10:00:00+09:00","task":"add retry to sync client","class":"implement","lane":"sol_advisor_luna_implementer","exception":null,"outcome":"success","attempts":1,"duration_s":540,"note":""}' >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
 ~~~
 
 A read-only sandbox refuses that write. Report the refusal rather than dropping the entry

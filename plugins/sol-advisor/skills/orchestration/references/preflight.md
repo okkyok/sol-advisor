@@ -51,7 +51,7 @@ spawning a lane, complete steps 4-5 before accepting its result:
    sh "$installer" --check
    ~~~
 
-   It must exit zero. This proves Terra, Sol, and the Luna floor lane match the
+   It must exit zero. This proves Luna, Sol, and the Luna floor lane match the
    shipped templates exactly and the retired Luna companion file is absent. If the
    check reports a missing, stale, unsafe, or conflicting file, stop the affected
    lane. Give the user the installer path and reported destination. Never work
@@ -60,7 +60,7 @@ spawning a lane, complete steps 4-5 before accepting its result:
 3. Inspect the native spawn tool's available `agent_type` entries. All three exact
    names must be exposed:
 
-   - `sol_advisor_terra_implementer`
+   - `sol_advisor_luna_implementer`
    - `sol_advisor_sol_reviewer`
    - `sol_advisor_luna_committer`
 
@@ -83,7 +83,7 @@ spawning a lane, complete steps 4-5 before accepting its result:
 
    The helper's allowlisted output is the authoritative local fallback for omitted
    model and effort. If public and local values both exist, they must agree. Accepted
-   values are Terra / high for judgment-bearing implementation, Luna / medium for
+   values are Luna / max for judgment-bearing implementation, Luna / medium for
    the floor lane, and Sol / high for review. Missing, inconsistent, unavailable, or
    unobservable routing stops that lane.
 

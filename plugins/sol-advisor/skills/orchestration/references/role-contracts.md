@@ -11,11 +11,11 @@ complete steps 3-4 before accepting the result:
 
 1. Require the non-mutating companion check to prove all three installed files exactly
    match current templates and the retired companion file is absent.
-2. Require native exposure of exactly `sol_advisor_terra_implementer`,
+2. Require native exposure of exactly `sol_advisor_luna_implementer`,
    `sol_advisor_sol_reviewer`, and `sol_advisor_luna_committer`.
 3. Observe the selected role, model, and effort through public spawn/details metadata
    first, using the local runtime inspector only for omitted fields. Accept only
-   Terra / High for judgment-bearing implementation, Luna / Medium for the floor
+   Luna / Max for judgment-bearing implementation, Luna / Medium for the floor
    lane, and Sol / High for review.
 4. For the reviewer, capture actual sandbox policy and permission profile types.
 
@@ -25,7 +25,7 @@ by custom-agent TOML, so omit per-spawn overrides.
 
 ## Shared implementation contract
 
-Every Terra prompt must contain all five sections:
+Every Luna implementation prompt must contain all five sections:
 
 ~~~text
 OBJECTIVE
@@ -65,7 +65,7 @@ GAPS: <unfinished work, ambiguity, or none>
 
 The primary session must inspect the diff and rerun verification itself.
 
-## Terra / High - implementation lane for judgment-bearing work
+## Luna / Max - implementation lane for judgment-bearing work
 
 Use this lane for every delegated implementation, from routine edits through complex,
 security-sensitive, context-heavy, and broad work.
@@ -73,11 +73,11 @@ security-sensitive, context-heavy, and broad work.
 Spawn exactly:
 
 ~~~text
-agent_type: sol_advisor_terra_implementer
+agent_type: sol_advisor_luna_implementer
 fork_turns: none
 ~~~
 
-The installed role pins GPT-5.6 Terra at high reasoning. Do not attach per-spawn model
+The installed role pins GPT-5.6 Luna at max reasoning. Do not attach per-spawn model
 or reasoning fields. Require public-details-first runtime observation of the exact
 role and pin before accepting its report.
 
