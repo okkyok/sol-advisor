@@ -34,7 +34,7 @@ def main():
                 .isoformat()
                 .replace("+00:00", "Z"),
                 "session_id": payload.get("session_id"),
-                "plugin_version": "0.7.0",
+                "plugin_version": "0.7.1",
             }
             tool_input_text = json.dumps(
                 payload.get("tool_input"), separators=(",", ":"), ensure_ascii=False
@@ -58,16 +58,13 @@ def main():
         tool_input = payload.get("tool_input")
         if not isinstance(tool_input, dict):
             return
-        if tool_input.get("agent_type") != "sol_advisor_sol_reviewer":
+        agent_type = tool_input.get("agent_type")
+        if agent_type not in ("sol_advisor_sol_reviewer", "sol_advisor_sol_consultant"):
             return
 
-        # Every reviewer spawn counts unless it is explicitly marked as a
-        # commitment-boundary consult. The exemption is opt-in on purpose: a
-        # forgotten marker costs one review cycle, while the reverse default
-        # would let a forgotten marker grant an unbounded review loop to the
-        # one party with an incentive to keep reviewing.
-        message = tool_input.get("message", "")
-        exempt = isinstance(message, str) and "COMMITMENT BOUNDARY" in message
+        # Final reviewer spawns are budgeted. The distinct Sol / Medium consultant
+        # records an auditable consultation and never consumes a review cycle.
+        is_consultant = agent_type == "sol_advisor_sol_consultant"
 
         data_dir = os.environ.get("PLUGIN_DATA") or os.environ.get("CLAUDE_PLUGIN_DATA")
         if not data_dir:
@@ -120,10 +117,7 @@ def main():
                 record.update(fields)
                 return record
 
-            if exempt:
-                # Recorded, not counted. An exempt spawn right after a denial is
-                # the signature of a final review relabelled as a consult, and
-                # ledger-report.sh reports it.
+            if is_consultant:
                 try:
                     append_record(stamped("consult", used=count))
                 except BaseException:

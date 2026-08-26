@@ -7,7 +7,7 @@ description: "Codex-native architect and delegation workflow using separately in
 
 Act as the architect. Own the user's intent, architecture, decomposition, complete
 implementation specification, parent verification, and final acceptance. Delegate all
-implementation to the native Luna / Max role, then require a fresh Sol verdict before
+implementation to the native Luna / Max role, then require a fresh Terra verdict before
 reporting the deliverable complete. These are native Codex custom-agent threads, not a
 nested Codex CLI wrapper or a global default-subagent setting.
 
@@ -73,8 +73,8 @@ exceptions below.
 | implement | Write or edit code, tests, or config against a specification. | Luna / Max |
 | explore | Read or search the codebase or history to answer a question. | Luna / Max |
 | ingest | Absorb external material (docs, logs, large files) into usable form. | Luna / Max |
-| review | Judge a completed change set against a stated goal. | Fresh Sol reviewer |
-| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Luna / Max, after a commitment-boundary Sol consult |
+| review | Judge a completed change set against a stated goal. | Fresh Terra reviewer |
+| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Luna / Max, after a Sol / Medium commitment-boundary consult |
 
 The floor lane's name is `sol_advisor_luna_committer`.
 
@@ -173,31 +173,32 @@ session before accepting it, and write the assertion that would have caught it.
 ## Consult Sol at commitment boundaries
 
 Before a consequential architecture, migration, public API, or wide refactor, spawn a
-fresh reviewer using the commitment-boundary packet from the role contracts:
+fresh Sol / Medium consultant using the commitment-boundary packet from the role contracts:
 
 ~~~text
-agent_type: sol_advisor_sol_reviewer
+agent_type: sol_advisor_sol_consultant
 fork_turns: none
 ~~~
 
-The role pins Sol / High and requests read-only isolation. Omit per-spawn model and
+The role pins Sol / Medium and requests read-only isolation. Omit per-spawn model and
 reasoning fields. Observe actual routing, sandbox, and permission metadata. The
 primary session remains responsible for the decision.
 
-Open the consult packet with the literal `COMMITMENT BOUNDARY` marker. Without it the
-consult consumes one of the deliverable's three final-review cycles, which is the safe
-direction to fail but still a cost worth avoiding.
+Open the consult packet with the literal `COMMITMENT BOUNDARY` marker. It is mandatory
+and identifies the Sol / Medium commitment-boundary consultation; the separate
+consultant agent type does not consume a final-review cycle.
 
 ## Require the final Sol review
 
-After implementation and parent verification, always spawn a new, fresh reviewer:
+After implementation and parent verification, always spawn a new, fresh Terra reviewer:
 
 ~~~text
 agent_type: sol_advisor_sol_reviewer
 fork_turns: none
 ~~~
 
-Use the final-review packet from the role contracts. Instruct the reviewer to remain
+The role pins Terra / High and requests read-only isolation. Use the final-review packet
+from the role contracts. Instruct the reviewer to remain
 behaviorally read-only, inspect the actual files and accumulated diff, and return
 exactly `ship`, `fix-first`, or `rethink`.
 
@@ -207,8 +208,8 @@ exactly `ship`, `fix-first`, or `rethink`.
 - `rethink`: revise architecture and do not report completion. A `rethink` consumes a
   review cycle like any other verdict.
 
-Never let the reviewer implement its own fixes. A Sol-on-Sol review is context-clean,
-not model-family-independent.
+Never let the reviewer implement its own fixes. A Terra review of Sol's orchestration is
+context-clean and model-family-independent.
 
 Apply the observed sandbox policy:
 
@@ -231,7 +232,8 @@ re-reviews. Count every final review, including one that follows a `rethink`.
 
 The plugin's `PreToolUse` hook counts each `tool_input.agent_type` equal to
 `sol_advisor_sol_reviewer`, regardless of the host-provided tool name, and denies the
-fourth at the host level. The primary session does not maintain the count. The hook
+fourth at the host level. The Sol / Medium consultant is a separate, uncounted
+commitment-boundary lane. The primary session does not maintain the count. The hook
 maintains `$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
 deliverable has used. Denials are recorded in the same ledger. The
 `scripts/ledger-report.sh` helper summarizes how the budget is actually being used. Do
@@ -242,16 +244,15 @@ Before the first final review, run the preflight's hook-liveness check at
 INERT` means the budget is prose again; report that plainly in the final report rather
 than assuming enforcement.
 
-The marker contract fails safe. Every spawn of `sol_advisor_sol_reviewer` consumes a
-cycle unless its packet carries the literal `COMMITMENT BOUNDARY` marker, which exempts
-a commitment-boundary consult. Forgetting the marker on a consult costs one review
-cycle; no omission anywhere grants an unbounded review loop. The exemption is opt-in
-precisely because the party composing the packet is the party with an incentive to keep
-reviewing.
+The marker contract remains mandatory in every Sol / Medium consultant packet. The
+consultant uses a distinct agent type and therefore does not consume a final review
+cycle. Every final reviewer spawn of `sol_advisor_sol_reviewer` consumes a
+cycle. The marker is an auditable protocol requirement and does not alter the final-review
+budget. No final-review budget is granted by relabelling a final review as a consult.
 
-Exempt spawns are recorded as `consult` entries rather than dropped, so relabelling a
-final review as a consult is auditable instead of invisible: `ledger-report.sh` reports
-an exempt consult or a reset that immediately follows a denial as a bypass signature.
+Consult spawns are recorded separately, so the consultation path remains auditable.
+`ledger-report.sh` reports a consult or a reset that immediately follows a denial as a
+bypass signature.
 
 The budget is keyed to the session and belongs to the deliverable. Never reset it because
 context was compacted, the specification was corrected, the architecture was revised,
@@ -303,7 +304,7 @@ repository, which is public, because entries carry task descriptions.
 Fields:
 
 ~~~json
-{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_luna_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
+{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_luna_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|sol_advisor_sol_consultant|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
 ~~~
 
 - `lane: "architect"` with `exception: 1-5` records work kept in the primary session, and

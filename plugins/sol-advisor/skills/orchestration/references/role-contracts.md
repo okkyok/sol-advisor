@@ -9,15 +9,16 @@ Adapt every placeholder without removing a required field.
 Before every spawn, complete steps 1-2 of [preflight.md](preflight.md). After spawning,
 complete steps 3-4 before accepting the result:
 
-1. Require the non-mutating companion check to prove all three installed files exactly
+1. Require the non-mutating companion check to prove all four installed files exactly
    match current templates and the retired companion file is absent.
 2. Require native exposure of exactly `sol_advisor_luna_implementer`,
-   `sol_advisor_sol_reviewer`, and `sol_advisor_luna_committer`.
+   `sol_advisor_sol_reviewer`, `sol_advisor_sol_consultant`, and
+   `sol_advisor_luna_committer`.
 3. Observe the selected role, model, and effort through public spawn/details metadata
    first, using the local runtime inspector only for omitted fields. Accept only
    Luna / Max for judgment-bearing implementation, Luna / Medium for the floor
-   lane, and Sol / High for review.
-4. For the reviewer, capture actual sandbox policy and permission profile types.
+   lane, Terra / High for final review, and Sol / Medium for commitment consultation.
+4. For the reviewer and consultant, capture actual sandbox policy and permission profile types.
 
 A missing, stale, unsafe, conflicting, unavailable, inconsistent, or unobservable
 role/model/effort stops the lane. Never silently fall back. Model and effort are pinned
@@ -118,7 +119,22 @@ specification literally. If it requires choosing between reasonable designs, ret
 <paste and complete the Shared implementation contract>
 ~~~
 
-## Fresh Sol - requested-read-only final reviewer
+## Sol / Medium - commitment-boundary consultant
+
+For consequential architecture, migration, public API, or wide-refactor decisions,
+spawn exactly:
+
+~~~text
+agent_type: sol_advisor_sol_consultant
+fork_turns: none
+~~~
+
+The installed role pins Sol / Medium and requests a read-only sandbox. Include the
+literal `COMMITMENT BOUNDARY` marker in the prompt. Require exactly `proceed`, `change`,
+or `stop`, plus the decisive reason and largest risk. This consultation is separate
+from the final-review budget.
+
+## Fresh Terra - requested-read-only final reviewer
 
 After parent verification, spawn a new native thread exactly:
 
@@ -127,7 +143,7 @@ agent_type: sol_advisor_sol_reviewer
 fork_turns: none
 ~~~
 
-The installed role pins GPT-5.6 Sol at high reasoning and requests a read-only sandbox.
+The installed role pins GPT-5.6 Terra at high reasoning and requests a read-only sandbox.
 Do not attach per-spawn model or reasoning fields. Observe the actual role, pin,
 sandbox policy, and permission profile before accepting its verdict.
 
@@ -184,9 +200,9 @@ RESIDUAL RISK: <most important remaining risk, or none>
 ~~~
 
 The `REVIEW CYCLE` line tells the reviewer which cycle it is in; the budget no longer
-depends on it. The shipped hook counts every `sol_advisor_sol_reviewer` spawn and exempts
-only a packet carrying the literal `COMMITMENT BOUNDARY` marker, so a final review that
-forgets a line is still counted. Never put that marker in a final-review packet.
+depends on it. The shipped hook counts every `sol_advisor_sol_reviewer` spawn. The separate
+`sol_advisor_sol_consultant` lane is not counted.
+The marker is mandatory for consultation packets; never put it in a final-review packet.
 
 If any fix is made after review, discard the verdict and run a new fresh review inside
 the review budget. That budget is at most 3 final reviews per deliverable, tracked by the
@@ -197,7 +213,7 @@ cycles, or `rethink` arrives at cycle 2 or later, stop the loop and hand the unr
 findings and options back to the user instead of spawning another lane. See SKILL.md's
 bounded-review-loop section for the full stop conditions.
 
-Sol reviewing Sol is context-clean, not cross-model-family independence.
+Terra reviewing Sol is context-clean and cross-model-family independent.
 
 Use observed isolation, not requested isolation:
 
@@ -210,7 +226,8 @@ Use observed isolation, not requested isolation:
 
 ## Commitment-boundary Sol consult
 
-For pre-implementation review, spawn the same fresh Sol role with `fork_turns: none`.
+For pre-implementation review, spawn the dedicated Sol / Medium consultant with
+`fork_turns: none`.
 Give it the proposed decision, goal, constraints, relevant paths, alternatives, and the
 one question that changes the plan. Require `proceed`, `change`, or `stop`, plus the
 decisive reason and largest risk. Apply the same preflight, runtime-observation,
@@ -224,6 +241,5 @@ COMMITMENT BOUNDARY
 This is a pre-implementation consult, not a final review of a completed change set.
 ~~~
 
-The hook records the exempt spawn as a `consult` entry. Omitting the marker costs one
-review cycle; putting it in a final-review packet is a bypass, and a consult that
-immediately follows a denial is reported as one by `scripts/ledger-report.sh`.
+The hook records the consultant spawn as a `consult` entry. The distinct consultant
+agent type does not consume a final-review cycle.
