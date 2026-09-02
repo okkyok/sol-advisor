@@ -9,8 +9,8 @@ Usage: install-agents.sh [--target-dir PATH] [--check]
 
 Install Sol Advisor's three current custom-agent templates into the target directory.
 Normal mode also replaces the recognized predecessor Sol template and removes the
-exact v0.7.0 legacy Terra template. It never overwrites a modified, nonregular,
-or symlinked destination.
+exact v0.7.0 legacy Terra template and the retired Sol consultant template. It never
+overwrites a modified, nonregular, or symlinked destination.
 
 Without --target-dir, the target is "$CODEX_HOME/agents" when CODEX_HOME is already
 set, otherwise "$HOME/.codex/agents".
@@ -18,7 +18,8 @@ set, otherwise "$HOME/.codex/agents".
 Options:
   --target-dir PATH  Explicit destination directory (absolute or relative).
   --check            Verify that Implementer, Sol, and the floor lane match exactly and no
-                     legacy Terra file remains; do not create, replace, or remove anything.
+                     retired Terra or Sol consultant files remain; do not create, replace,
+                     or remove anything.
   --help             Show this help text.
 EOF
 }
@@ -102,6 +103,25 @@ classify_legacy_terra() {
   fi
 }
 
+classify_legacy_consultant() {
+  destination=$1
+
+  if ! path_exists "$destination"; then
+    printf '%s\n' missing
+  elif [ -L "$destination" ] || [ ! -f "$destination" ]; then
+    printf '%s\n' unsafe
+  else
+    digest=$(sha256_file "$destination")
+    if [ "$digest" = "$legacy_consultant_sha256" ]; then
+      printf '%s\n' legacy
+    elif [ -z "$digest" ]; then
+      printf '%s\n' unreadable
+    else
+      printf '%s\n' conflict
+    fi
+  fi
+}
+
 same_state() {
   label=$1
   expected=$2
@@ -138,6 +158,13 @@ replace_legacy_terra() {
     fail "legacy Terra destination changed after preflight and will not be removed: $terra_destination"
   rm "$terra_destination" || fail "could not remove exact legacy Terra template: $terra_destination"
   printf '%s\n' "REMOVED LEGACY: $terra_destination"
+}
+
+replace_legacy_consultant() {
+  [ "$(classify_legacy_consultant "$legacy_consultant_destination")" = legacy ] ||
+    fail "legacy Sol consultant destination changed after preflight and will not be removed: $legacy_consultant_destination"
+  rm "$legacy_consultant_destination" || fail "could not remove exact legacy Sol consultant template: $legacy_consultant_destination"
+  printf '%s\n' "REMOVED LEGACY: $legacy_consultant_destination"
 }
 
 replace_legacy_sol() {
@@ -222,6 +249,7 @@ implementer_file=sol-advisor-luna-implementer.toml
 sol_file=sol-advisor-sol-reviewer.toml
 floor_file=sol-advisor-luna-committer.toml
 terra_file=sol-advisor-terra-implementer.toml
+legacy_consultant_file=sol-advisor-sol-consultant.toml
 implementer_template=$template_dir/$implementer_file
 sol_template=$template_dir/$sol_file
 floor_template=$template_dir/$floor_file
@@ -229,6 +257,7 @@ implementer_destination=$target_dir/$implementer_file
 sol_destination=$target_dir/$sol_file
 floor_destination=$target_dir/$floor_file
 terra_destination=$target_dir/$terra_file
+legacy_consultant_destination=$target_dir/$legacy_consultant_file
 
 # Immutable v0.2.0 byte digests
 legacy_luna_sha256=fba1b42849d93737e83b094a2ab0b1611f87ac37db7438c8bbdf581f0813f8eb
@@ -236,10 +265,13 @@ legacy_luna_sha256=fba1b42849d93737e83b094a2ab0b1611f87ac37db7438c8bbdf581f0813f
 # v0.7.0 Terra implementer digest (now legacy)
 legacy_terra_sha256=06c318e5e93f37452635906394e6ea69fb6a65ba9e6ad7172d37b444e0dc871d
 
+# Retired Sol commitment-boundary consultant digest (now legacy)
+legacy_consultant_sha256=9aa471a58979238ecb0073a0c3a8f770ae90415f7ead8b62f92136567456fde9
+
 # Digest of the previously shipped Sol reviewer template, so an installed copy of the
 # prior release migrates instead of being refused as a conflict. Add the predecessor
 # digest here whenever a shipped template changes.
-prev_sol_sha256=0333acf0ef562bcfebd06009ac09bd1dd8cbc04c4cf28e08e9e049bd8bf202d2
+prev_sol_sha256=b2e492c2c237ce22d7b8137430afb51325671d503b1e4aa1801eb702d03ffb62
 
 for template in "$implementer_template" "$sol_template" "$floor_template"; do
   [ -f "$template" ] && [ ! -L "$template" ] ||
@@ -257,6 +289,7 @@ implementer_state=$(classify_current_or_legacy "$implementer_destination" "$impl
 sol_state=$(classify_current_or_legacy "$sol_destination" "$sol_template" "$prev_sol_sha256")
 floor_state=$(classify_current_or_legacy "$floor_destination" "$floor_template" '')
 terra_state=$(classify_legacy_terra "$terra_destination")
+legacy_consultant_state=$(classify_legacy_consultant "$legacy_consultant_destination")
 
 if [ "$check_only" -eq 1 ]; then
   [ "$implementer_state" = current ] ||
@@ -267,6 +300,8 @@ if [ "$check_only" -eq 1 ]; then
     report_preflight_error "floor-lane template is $floor_state, not the current exact file: $floor_destination"
   [ "$terra_state" = missing ] ||
     report_preflight_error "legacy Terra file remains or is unsafe: $terra_destination"
+  [ "$legacy_consultant_state" = missing ] ||
+    report_preflight_error "legacy Sol consultant file remains or is unsafe: $legacy_consultant_destination"
 else
   case "$implementer_state" in
     current|missing) ;;
@@ -284,12 +319,16 @@ else
     missing|legacy) ;;
     *) report_preflight_error "legacy Terra destination is $terra_state and will not be removed: $terra_destination" ;;
   esac
+  case "$legacy_consultant_state" in
+    missing|legacy) ;;
+    *) report_preflight_error "legacy Sol consultant destination is $legacy_consultant_state and will not be removed: $legacy_consultant_destination" ;;
+  esac
 fi
 
 [ "$preflight_failed" -eq 0 ] || exit 1
 
 if [ "$check_only" -eq 1 ]; then
-  printf '%s\n' "CHECK PASSED: Implementer, Sol, and the floor lane exactly match $template_dir; no legacy Terra file remains."
+  printf '%s\n' "CHECK PASSED: Implementer, Sol, and the floor lane exactly match $template_dir; no retired Terra or Sol consultant files remain."
   exit 0
 fi
 
@@ -303,6 +342,7 @@ same_state Implementer "$implementer_state" "$(classify_current_or_legacy "$impl
 same_state Sol "$sol_state" "$(classify_current_or_legacy "$sol_destination" "$sol_template" "$prev_sol_sha256")"
 same_state "floor lane" "$floor_state" "$(classify_current_or_legacy "$floor_destination" "$floor_template" '')"
 same_state "legacy Terra" "$terra_state" "$(classify_legacy_terra "$terra_destination")"
+same_state "legacy Sol consultant" "$legacy_consultant_state" "$(classify_legacy_consultant "$legacy_consultant_destination")"
 
 case "$implementer_state" in
   missing) install_missing "$implementer_template" "$implementer_destination" ;;
@@ -323,6 +363,9 @@ esac
 if [ "$terra_state" = legacy ]; then
   replace_legacy_terra
 fi
+if [ "$legacy_consultant_state" = legacy ]; then
+  replace_legacy_consultant
+fi
 
 [ "$(classify_current_or_legacy "$implementer_destination" "$implementer_template" '')" = current ] ||
   fail "post-install exactness check failed: $implementer_destination"
@@ -332,5 +375,7 @@ fi
   fail "post-install exactness check failed: $floor_destination"
 [ "$(classify_legacy_terra "$terra_destination")" = missing ] ||
   fail "post-install legacy removal check failed: $terra_destination"
+[ "$(classify_legacy_consultant "$legacy_consultant_destination")" = missing ] ||
+  fail "post-install legacy Sol consultant removal check failed: $legacy_consultant_destination"
 
-printf '%s\n' "INSTALL PASSED: Implementer, Sol, and the floor lane exactly match $template_dir; no legacy Terra file remains."
+printf '%s\n' "INSTALL PASSED: Implementer, Sol, and the floor lane exactly match $template_dir; no retired Terra or Sol consultant files remain."

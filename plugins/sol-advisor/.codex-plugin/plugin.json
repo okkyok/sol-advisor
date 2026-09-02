@@ -1,7 +1,7 @@
 {
   "name": "sol-advisor",
-  "version": "0.7.1",
-  "description": "Codex-native architect workflow with role-pinned Luna / Max and Luna / Medium implementation lanes and a budgeted, fresh requested-read-only Sol review.",
+  "version": "0.8.0",
+  "description": "Codex-native architect workflow with role-pinned Luna / Max and Luna / Medium implementation lanes, a budgeted, fresh requested-read-only Sol review, and a rare external Claude Opus Challenger.",
   "author": {"name": "Daniel McAteer", "url": "https://github.com/DannyMac180"},
   "homepage": "https://github.com/okkyok/sol-advisor#readme",
   "repository": "https://github.com/okkyok/sol-advisor",
@@ -11,8 +11,8 @@
   "hooks": "./hooks.json",
   "interface": {
     "displayName": "Sol Advisor",
-    "shortDescription": "Architect with Sol, implement with role-pinned Luna / Max or the Luna / Medium floor lane, and review with Sol.",
-    "longDescription": "Sol Advisor gives Codex a delivery workflow: GPT-5.6 Sol orchestrates and classifies each task, a role-pinned GPT-5.6 Luna / Max agent handles judgment-bearing implementation while a GPT-5.6 Luna / Medium floor lane takes mechanical edits, and a fresh requested-read-only Sol reviewer must approve the final diff within a bounded review budget.",
+    "shortDescription": "Architect with Sol, implement with role-pinned Luna / Max or the Luna / Medium floor lane, review with Sol, and use the external Claude Opus Challenger on rare triggers.",
+    "longDescription": "Sol Advisor gives Codex a delivery workflow: GPT-5.6 Sol orchestrates and classifies each task, a role-pinned GPT-5.6 Luna / Max agent handles judgment-bearing implementation while a GPT-5.6 Luna / Medium floor lane takes mechanical edits, and a fresh requested-read-only Sol reviewer must approve the final diff within a bounded review budget. A rare external Claude Opus Challenger provides a cross-model-family second opinion for deadlock, irreversible, or user-request triggers.",
     "developerName": "Daniel McAteer",
     "category": "Productivity",
     "capabilities": ["Interactive", "Write"],

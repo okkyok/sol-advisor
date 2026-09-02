@@ -165,14 +165,20 @@ REVIEW
 Inspect the actual files and accumulated change set. Judge correctness, completeness,
 regressions, scope discipline, interface preservation, test adequacy, and material risk.
 Reserve `fix-first` for defects that block the stated goal or introduce material risk.
-Style preferences, speculative hardening, and improvements outside the stated goal are
-DEFERRED, not findings.
+Style preferences and improvements outside the stated goal are DEFERRED, not findings.
+
+Scope inflation is a defect, not a preference. A change set that delivers artifacts the
+stated objective did not ask for — unrequested options, unused abstraction,
+speculative hardening, configuration nobody requested — fails the objective the way a
+missing requirement does. The finding names the surplus artifact and the objective it
+does not serve. Judge this against the stated objective only, never against a preferred
+design: alternative implementations, naming, and structure stay DEFERRED.
 
 Stay under 300 words; the reader is another model mid-task. A sound change set gets
 one line: do not manufacture objections to justify having been consulted. Findings
-must be defects, not preferences; if the change set is correct and complete for the
-stated goal, the verdict is ship even when a different implementation would have been
-possible.
+must be defects, not preferences; "Correct and complete for the stated goal" means the
+goal is met and nothing beyond it was delivered. When that holds, the verdict is ship
+even though a different implementation would have been possible.
 
 SOL REVIEW
 CYCLE: <n> of 3
@@ -227,3 +233,64 @@ This is a pre-implementation consult, not a final review of a completed change s
 The hook records the exempt spawn as a `consult` entry. Omitting the marker costs one
 review cycle; putting it in a final-review packet is a bypass, and a consult that
 immediately follows a denial is reported as one by `scripts/ledger-report.sh`.
+
+## Challenge packet
+
+The Challenger has no repository access. The packet must therefore be entirely
+self-contained: everything the architect wants judged, including the relevant change set,
+evidence, constraints, and unresolved findings, must be inside the packet text itself rather
+than referenced by path.
+
+Use exactly one of the following first lines, then pipe the packet to the external helper:
+
+~~~text
+TRIGGER: deadlock
+TRIGGER: irreversible
+TRIGGER: user-request
+~~~
+
+The normal invocation is `cat challenge-packet.txt | sh "$plugin_dir/scripts/challenge.sh"`;
+the helper also accepts `--packet challenge-packet.txt`. It invokes the external CLI in this
+shape, with the packet on stdin and no positional prompt argument:
+
+~~~sh
+claude -p --model opus --output-format json --strict-mcp-config \
+  --system-prompt ... \
+  --disallowedTools Write Edit NotebookEdit Bash
+~~~
+
+Treat a `CHALLENGER DEGRADED` stderr message as a reply that is not a verified Opus
+cross-model-family challenge, and repeat that message in the final report. Treat a
+`CHALLENGER UNAVAILABLE` stderr message and non-zero exit as no usable reply; do not invent a
+verdict.
+
+Compose the packet in this shape. For `deadlock`, state the unresolved findings and the fixes
+that failed to resolve them under `WHAT THE SOL REVIEWER SAID`:
+
+~~~text
+TRIGGER: deadlock | irreversible | user-request
+<one line: which stop condition fired, or what specifically is irreversible>
+
+DECISION OR CHANGE SET
+<the architecture decision, or the accumulated diff>
+
+STATED GOAL
+<the requested outcome>
+
+CONSTRAINTS
+<the interfaces, safety boundaries, and excluded scope>
+
+OPTIONS ALREADY CONSIDERED AND REJECTED
+<the alternatives and why they were rejected>
+
+WHAT THE SOL REVIEWER SAID
+<the review verdict and evidence; for deadlock, include unresolved findings and failed fixes>
+
+THE ONE QUESTION THAT CHANGES THE DECISION
+<the decisive open question>
+
+CHALLENGE
+VERDICT: agree | challenge | blocked-risk
+REASON: <the decisive reason>
+LARGEST RISK: <one>
+~~~

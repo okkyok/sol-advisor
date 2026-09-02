@@ -1,6 +1,6 @@
 # Sol Advisor
 
-**Sol runs the show. Terra / High handles implementation, and a fresh Sol review
+**Sol runs the show. Luna / Max handles implementation, and a fresh Sol review
 with a requested read-only profile stands between the diff and done.**
 
 Sol Advisor is a Codex-native architect workflow for capability-routed software
@@ -13,14 +13,23 @@ I write [**Attention Heads**](https://attentionheads.substack.com/?utm_source=gi
 
 | Lane | Native agent type | Pinned profile | Use it for |
 |---|---|---|---|
-| Orchestrator | Primary session | GPT-5.6 Sol / High | Requirements, architecture, decomposition, routing, and acceptance |
-| Implementation | sol_advisor_terra_implementer | GPT-5.6 Terra / High | Bounded work specified by the Sol orchestrator |
+| Orchestrator | Primary session | GPT-5.6 Sol / Medium | Requirements, architecture, decomposition, routing, and acceptance |
+| Implementation | sol_advisor_luna_implementer | GPT-5.6 Luna / Max | Bounded work specified by the Sol orchestrator |
 | Floor | sol_advisor_luna_committer | GPT-5.6 Luna / Medium | Mechanical, fully-determined edits the specification leaves nothing to decide in |
 | Final review | sol_advisor_sol_reviewer | GPT-5.6 Sol / High / requests read-only | Fresh review of the actual diff and verification evidence |
+| Challenger | `scripts/challenge.sh` (external `claude` CLI, not a native agent) | Claude Opus | deadlock, irreversible, user-request |
 
 The final review is context-independent, not model-family-independent: Sol reviews
 Sol's orchestration with a fresh context. That catches conversational assumptions, but
-it is not cross-vendor review.
+it is not cross-vendor review. That gap now has a named, bounded remedy—the Challenger—for
+deadlock, irreversible, and user-request triggers; it is rare and triggered, not a routine
+substitute for cross-vendor review.
+
+For the exact triggers `deadlock`, `irreversible`, and `user-request`, the Challenger is
+invoked as a plain shell command via `scripts/challenge.sh`, not a native custom agent.
+This avoids routing Claude's judgment through a Codex summary, which would reintroduce the
+model-family correlation the Challenger exists to break, and avoids the roughly 8.8s native
+spawn floor.
 
 ## Install from GitHub
 
@@ -28,7 +37,7 @@ Requirements:
 
 - A current Codex CLI or ChatGPT desktop app with plugins, native subagents, and
   custom agents enabled.
-- Access to GPT-5.6 Sol / High and GPT-5.6 Terra / High.
+- Access to GPT-5.6 Sol and GPT-5.6 Luna at the reasoning efforts in the table above.
 - jq, which the companion-install lookup uses to locate the installed plugin package.
 
 Add the GitHub repository as a Codex marketplace, then install the plugin:
@@ -60,7 +69,7 @@ missing template and then verifies every installed copy byte-for-byte.
 Start a **new Codex task** after the check passes. Native agent types are discovered at
 task creation, so an existing task may not see the installed roles.
 
-Then select GPT-5.6 Sol with High reasoning for the primary session and ask for
+Then select GPT-5.6 Sol with Medium reasoning for the primary session and ask for
 implementation work normally, or invoke the orchestration skill explicitly:
 
 ~~~text
@@ -89,14 +98,14 @@ sh "$plugin_dir/scripts/install-agents.sh"
 sh "$plugin_dir/scripts/install-agents.sh" --check
 ~~~
 
-Version 0.4.0 recognizes only byte-exact v0.2.0 legacy
-`sol-advisor-luna-implementer.toml` and `sol-advisor-terra-implementer.toml` files.
+Version 0.4.0 recognizes only byte-exact v0.2.0 legacy `sol-advisor-luna-implementer.toml` and `sol-advisor-terra-implementer.toml` files.
 The installer also migrates the previous shipped Sol reviewer template so a
 project-changed shipped template is not refused as a conflict.
-Normal installer mode replaces the exact legacy Terra file with the current Terra /
-High template, removes the exact legacy Luna file, and refuses modified, nonregular,
+Normal installer mode installs the current role templates, removes the exact retired
+Terra and Sol consultant files, and refuses modified, nonregular,
 or symlinked destinations without partial agent-file mutation. `--check` is
-non-mutating and fails until both current role files match exactly and Luna is absent.
+non-mutating and fails until all three current role files match exactly and no
+retired file remains.
 This routing update was motivated by
 [Eric Provencher's X post](https://x.com/pvncher/status/2083300990350954981).
 
@@ -133,7 +142,7 @@ exist, they must agree.
 ## How routing works
 
 The Sol orchestrator writes a five-part spec for every implementation: objective, file
-ownership, interfaces, constraints, and verification. Terra / High is the sole
+ownership, interfaces, constraints, and verification. Luna / Max is the sole
 implementation producer; Sol keeps architecture, routing, parent verification, and
 acceptance in the primary session.
 
@@ -212,7 +221,7 @@ destroy the liveness check.
 ### Choosing a lane
 
 The skill classifies every task into one of six classes (commit, implement, explore,
-ingest, review, hardest) and routes it to the floor lane, Terra / High, or the fresh
+ingest, review, hardest) and routes it to the floor lane, Luna / Max, or the fresh
 Sol reviewer by default, keeping work in the primary session only for five named
 exceptions: context-bound tasks, work below the measured spawn floor, architect work
 by definition, the final review gate, and tooling only the primary session can reach.

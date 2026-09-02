@@ -17,19 +17,32 @@ session.
 
 ## What this workflow optimizes
 
-The primary Sol / Medium session is the scarcest resource in this workflow. Its output
-is decomposition, specifications, routing decisions, verdicts on evidence, and short
-reports, not implementation text.
+Scarcity here is ordered, and the order decides every routing call below:
 
-Delegation exists to keep the primary context lean, not merely to save money:
-everything in it is re-read on every turn.
+1. Cross-model-family judgment. It comes from outside this subscription, its ceiling is
+   external and hard, and nothing inside this workflow substitutes for it.
+   See the "## Challenge from outside the model family" section for where this resource is spent.
+2. The primary session's context. Everything in it is re-read on every turn, so its cost
+   is set by the workflow's shape, not by what tokens cost.
+3. Codex tokens. The abundant resource. Spend them.
 
-Terminating is worth more than one more finding. A reviewer with a fresh context can
-always produce another finding, so the workflow optimizes for a correct ship/stop
-decision made once, not for the largest possible finding count.
+The primary session's output is decomposition, specifications, routing decisions, verdicts on
+evidence, and short reports, not implementation text.
 
-When a rule below does not cover the situation, extrapolate from these three, in this
-order.
+Delegation exists to keep the primary context lean, not merely to save money: everything in it
+is re-read on every turn.
+
+Spend the codex surplus on width, not depth. Another delegation keeps the primary context lean,
+which is resource 2. Deeper reasoning inside the primary session does the opposite, and there is
+a second reason to be careful with it: the architect's output is a specification that a lane
+executes literally, so anything the architect over-specifies is amplified downstream rather than
+pruned there.
+
+Terminating is worth more than one more finding. A reviewer with a fresh context can always
+produce another finding, so the workflow optimizes for a correct ship/stop decision made once,
+not for the largest possible finding count.
+
+When a rule below does not cover the situation, extrapolate from these, in this order.
 
 ## Confirm the primary session
 
@@ -104,7 +117,9 @@ Keep work in the primary session only for one of these five named reasons:
    (spawn, wait, result) costs about 8.8 s of wall clock. This floor is low precisely
    because the lanes are in-process native threads, not a separate CLI process, so
    "faster to do it myself" is a valid exception only for a single-line, single-file
-   edit, and only when the architect names the number.
+   edit, and only when the architect names the number. The floor is wall clock only;
+   codex tokens are resource 3, so their cost is never by itself a reason to keep work
+   in the primary session.
 3. Architect work by definition: decomposition, interface design, hypothesis
    selection, spec writing, and judging verification evidence.
 4. The final review gate: the fresh Sol review never moves into the primary session.
@@ -201,6 +216,9 @@ Use the final-review packet from the role contracts. Instruct the reviewer to re
 behaviorally read-only, inspect the actual files and accumulated diff, and return
 exactly `ship`, `fix-first`, or `rethink`.
 
+Scope inflation is a defect there, not a preference: an artifact the stated objective did
+not ask for fails that objective the way a missing requirement does.
+
 - `ship`: report completion with verification evidence.
 - `fix-first`: delegate the required fixes, verify again, and obtain a new review
   inside the review budget below.
@@ -281,6 +299,46 @@ findings, and the options you see, then ask the user which to take.
 
 A hook denial is not an error to route around; it is this stop condition firing. Hand the
 unresolved findings, current evidence, and options to the user.
+
+## Challenge from outside the model family
+
+The Challenger is a pinpoint second opinion from outside this model family. Invoke it as
+exactly one external `claude` CLI call through `scripts/challenge.sh`, not as a native Codex
+custom-agent spawn. A native spawn would make the architect read Claude's judgment through a
+Codex summary, reintroducing the model-family correlation this call exists to break, and adds
+the observed ~8.8 s native spawn floor. The shell call avoids both.
+
+Use exactly one Challenger call only for these triggers:
+
+- `deadlock`: one of the stop conditions above has fired: the budget is exhausted with cycle 3
+  returning something other than `ship`; a finding survived two consecutive fix cycles or
+  reappeared; or a `rethink` arrived at cycle 2 or later. Make exactly one call before handing
+  control back to the user, and attach its reply. This is the highest-value trigger because a
+  Sol reviewer that cannot converge in three cycles is exactly where a correlated model-family
+  blind spot is suspected, and because the stop conditions themselves are structurally rare.
+- `irreversible`: the change is a data migration, a public API, an auth, billing, or permission
+  boundary, or a deletion. This is not every commitment boundary; it is only what cannot be
+  undone.
+- `user-request`: the user asked for the Challenger.
+
+Never use it for routine features, for a change set that already returned `ship`, or for "one
+more opinion".
+
+The Challenger advises. Implementation never moves to it; the Luna implementation and floor
+lanes keep ownership of all code changes.
+
+Its reply is evidence for the architect's decision, not a verdict that overrides the Sol
+reviewer's `ship`, `fix-first`, or `rethink` verdict.
+
+The budget is bounded by this trigger list and by `challenge.sh` refusing to run without a
+declared trigger. It is deliberately not enforced by a `PreToolUse` hook the way the Sol review
+budget is. The triggers are structurally rare, so machine enforcement here would be complexity
+built ahead of evidence. `challenger.jsonl` is the instrument: if it shows the triggers firing
+more often than the stop conditions above actually warrant, add enforcement then, not before.
+
+The external Anthropic subscription is a hard ceiling. If a call emits `CHALLENGER DEGRADED`,
+repeat that line verbatim in the architect's final report to the user. A degraded call is not a
+cross-family challenge and must never be silently presented as one.
 
 ## Routing ledger
 

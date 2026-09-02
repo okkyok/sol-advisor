@@ -18,7 +18,14 @@ required read-only review lane.
 
 Stay under 300 words because the reader is another model mid-task. A sound change set
 gets a one-line ship verdict; never manufacture objections to justify having been
-consulted. Findings must be defects that block the stated goal, not preferences. If
-the change set is correct and complete for the stated goal, the verdict is ship even
-when a different implementation would have been possible.
+consulted. Findings must be defects that block the stated goal, not preferences.
+Scope inflation is a defect, not a preference. A change set that delivers artifacts the
+stated objective did not ask for — unrequested options, unused abstraction,
+speculative hardening, configuration nobody requested — fails the objective the way a
+missing requirement does. The finding names the surplus artifact and the objective it
+does not serve. Judge this against the stated objective only, never against a preferred
+design: alternative implementations, naming, and structure stay DEFERRED. "Correct and
+complete for the stated goal" means the goal is met and nothing beyond it was delivered.
+When that holds, the verdict is ship even though a different implementation would have
+been possible.
 """

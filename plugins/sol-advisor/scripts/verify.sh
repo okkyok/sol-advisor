@@ -17,6 +17,7 @@ hooks_file=$plugin_dir/hooks.json
 review_hook=$plugin_dir/hooks/review-budget.py
 data_dir_resolver=$script_dir/resolve-data-dir.sh
 ledger_report=$script_dir/ledger-report.sh
+challenge=$script_dir/challenge.sh
 skill=$plugin_dir/skills/orchestration/SKILL.md
 contracts=$plugin_dir/skills/orchestration/references/role-contracts.md
 preflight=$plugin_dir/skills/orchestration/references/preflight.md
@@ -37,12 +38,15 @@ trap cleanup 0 HUP INT TERM
 tmp_dir=$(mktemp -d "$tmp_base/sol-advisor-verify.XXXXXX") || fail "could not create disposable verification directory"
 
 terra_file=sol-advisor-terra-implementer.toml
+legacy_consultant_file=sol-advisor-sol-consultant.toml
 sol_file=sol-advisor-sol-reviewer.toml
+reviewer_template=$plugin_dir/agents/sol-advisor-sol-reviewer.toml
 floor_file=sol-advisor-luna-committer.toml
 luna_file=sol-advisor-luna-implementer.toml
-legacy_terra_sha256=4425a8c1f21ce8c6af93f96adc253bbc33ea301f1389b3fa8ce350be08584eca
+legacy_terra_sha256=06c318e5e93f37452635906394e6ea69fb6a65ba9e6ad7172d37b444e0dc871d
+legacy_consultant_sha256=9aa471a58979238ecb0073a0c3a8f770ae90415f7ead8b62f92136567456fde9
 legacy_luna_sha256=fba1b42849d93737e83b094a2ab0b1611f87ac37db7438c8bbdf581f0813f8eb
-prev_sol_sha256=0333acf0ef562bcfebd06009ac09bd1dd8cbc04c4cf28e08e9e049bd8bf202d2
+prev_sol_sha256=b2e492c2c237ce22d7b8137430afb51325671d503b1e4aa1801eb702d03ffb62
 
 snapshot_files() {
   target=$1
@@ -88,14 +92,110 @@ LEGACY_TERRA
   [ "$(shasum -a 256 "$target/$terra_file" | awk '{print $1}')" = "$legacy_terra_sha256" ] || fail "legacy Terra fixture digest drifted"
 }
 
-for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$data_dir_resolver" "$ledger_report" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
+write_legacy_consultant() {
+  target=$1
+  mkdir -p "$target"
+  cat > "$target/$legacy_consultant_file" <<'LEGACY_CONSULTANT'
+name = "sol_advisor_sol_consultant"
+description = "Sol Advisor's read-only Sol / Medium commitment-boundary consultation lane."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
+
+developer_instructions = """
+You are Sol Advisor's commitment-boundary consultant. Remain strictly read-only: do not
+create, modify, delete, format, or implement files. Review the proposed architecture,
+scope, interfaces, constraints, and alternatives in a fresh context. This lane is used
+only before hardest work and must not perform implementation or final review.
+
+Return exactly one recommendation: proceed, change, or stop. Base it on the decisive
+question and concrete evidence. State the largest risk and the smallest change needed
+when recommending change. Do not silently substitute a different role, model, or
+reasoning level.
+
+You are a leaf worker. Never spawn or delegate to another agent; advise directly in
+this session. The hardest-lane chain (consultant then implementer) is sequenced by the
+primary session, not by you.
+"""
+LEGACY_CONSULTANT
+  [ "$(shasum -a 256 "$target/$legacy_consultant_file" | awk '{print $1}')" = "$legacy_consultant_sha256" ] || fail "legacy consultant fixture digest drifted"
+}
+
+for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$data_dir_resolver" "$ledger_report" "$challenge" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
   test -f "$required" || fail "required file missing: $required"
 done
+test -x "$challenge" || fail "challenge.sh is not executable"
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.7.1 ] || fail "manifest version is not 0.7.1"
+[ "$(jq -r '.version' "$manifest")" = 0.8.0 ] || fail "manifest version is not 0.8.0"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
+grep -Fq '"plugin_version": "0.8.0"' "$review_hook" || fail "review-budget.py plugin_version constant does not match manifest 0.8.0"
+pass "manifest, verify assertion, and hook constant agree on 0.8.0"
+
+grep -Fq -- '--strict-mcp-config' "$challenge" || fail "challenge.sh is missing strict MCP configuration"
+grep -Fq -- '--system-prompt' "$challenge" || fail "challenge.sh is missing the system prompt flag"
+grep -Fq -- '--model opus' "$challenge" || fail "challenge.sh is missing the pinned Opus model"
+grep -Fq -- '--output-format json' "$challenge" || fail "challenge.sh is missing JSON output mode"
+grep -Fq 'claude-opus-5' "$challenge" || fail "challenge.sh is missing downgrade detection"
+if grep -Fq 'jq' "$challenge"; then fail "challenge.sh must not depend on jq"; fi
+grep -Fq 'cat "$packet_file" | claude -p' "$challenge" || fail "challenge.sh does not pipe the packet to claude stdin"
+if grep -Eq 'claude -p.*"\$packet_file"([[:space:]]|$)' "$challenge"; then fail "challenge.sh passes the packet as a claude positional argument"; fi
+pass "challenge.sh invocation shape and downgrade detection"
+
+refusal_bin=$tmp_dir/challenge-refusal-bin
+refusal_sentinel=$tmp_dir/challenge-refusal-sentinel
+mkdir "$refusal_bin"
+cat > "$refusal_bin/claude" <<'STUB_CLAUDE'
+#!/bin/sh
+: > "$CHALLENGE_REFUSAL_SENTINEL"
+STUB_CLAUDE
+chmod +x "$refusal_bin/claude"
+if printf '%s\n' 'no trigger line here' | PATH="$refusal_bin:$PATH" CHALLENGE_REFUSAL_SENTINEL="$refusal_sentinel" sh "$challenge"; then
+  fail "challenge.sh accepted a packet with no valid TRIGGER line"
+fi
+test ! -e "$refusal_sentinel" || fail "challenge.sh invoked claude for a packet with no valid TRIGGER line"
+pass "challenge.sh refuses a packet with no valid TRIGGER line before invoking claude"
+
+downgrade_bin=$tmp_dir/challenge-downgrade-bin
+downgrade_home=$tmp_dir/challenge-downgrade-home
+downgrade_stderr=$tmp_dir/challenge-downgrade-stderr
+opus_home=$tmp_dir/challenge-opus-home
+opus_stderr=$tmp_dir/challenge-opus-stderr
+mkdir "$downgrade_bin"
+cat > "$downgrade_bin/claude" <<'STUB_CLAUDE'
+#!/bin/sh
+case "${CHALLENGE_MODEL_MODE:-sonnet}" in
+  opus)
+    printf '%s\n' '{"result":"opus challenger reply","modelUsage":{"claude-opus-5":{"inputTokens":1}},"total_cost_usd":0}'
+    ;;
+  *)
+    printf '%s\n' '{"result":"degraded challenger reply","modelUsage":{"claude-sonnet-5":{"inputTokens":1}},"total_cost_usd":0}'
+    ;;
+esac
+STUB_CLAUDE
+chmod +x "$downgrade_bin/claude"
+if ! degraded_reply=$(printf '%s\n' 'TRIGGER: deadlock' | PATH="$downgrade_bin:$PATH" CODEX_HOME="$downgrade_home" CHALLENGE_MODEL_MODE=sonnet sh "$challenge" 2>"$downgrade_stderr"); then
+  fail "challenge.sh rejected a valid degraded stub response"
+fi
+[ "$degraded_reply" = "degraded challenger reply" ] || fail "degraded stub reply was not preserved on stdout"
+grep -Fq 'CHALLENGER DEGRADED: claude-sonnet-5' "$downgrade_stderr" || fail "degraded stub response did not report CHALLENGER DEGRADED"
+grep -Fq '"degraded":true' "$downgrade_home/sol-advisor/challenger.jsonl" || fail "degraded ledger record did not set degraded=true"
+grep -Fq '"outcome":"degraded"' "$downgrade_home/sol-advisor/challenger.jsonl" || fail "degraded ledger record did not set outcome=degraded"
+if ! opus_reply=$(printf '%s\n' 'TRIGGER: deadlock' | PATH="$downgrade_bin:$PATH" CODEX_HOME="$opus_home" CHALLENGE_MODEL_MODE=opus sh "$challenge" 2>"$opus_stderr"); then
+  fail "challenge.sh rejected a valid Opus stub response"
+fi
+[ "$opus_reply" = "opus challenger reply" ] || fail "Opus stub reply was not preserved on stdout"
+if grep -Fq 'CHALLENGER DEGRADED' "$opus_stderr"; then fail "Opus stub response was incorrectly marked degraded"; fi
+grep -Fq '"degraded":false' "$opus_home/sol-advisor/challenger.jsonl" || fail "Opus ledger record did not set degraded=false"
+grep -Fq '"outcome":"ok"' "$opus_home/sol-advisor/challenger.jsonl" || fail "Opus ledger record did not set outcome=ok"
+pass "challenge.sh detects degraded model metadata and records both outcomes"
+
+for trigger in deadlock irreversible user-request; do
+  grep -Fq "$trigger" "$skill" || fail "$skill is missing Challenger trigger: $trigger"
+  grep -Fq "$trigger" "$contracts" || fail "$contracts is missing Challenger trigger: $trigger"
+done
+pass "SKILL.md and role-contracts.md document all three Challenger triggers"
 
 jq empty "$hooks_file"
 jq -e '
@@ -234,7 +334,7 @@ printf '%s\n' "$clean_output" | grep -Fq 'does not show any budget warning condi
 empty_ledger_data=$tmp_dir/empty-ledger
 mkdir "$empty_ledger_data"
 before=$(snapshot_files "$empty_ledger_data")
-if ! no_ledger_output=$(sh "$ledger_report" --data-dir "$empty_ledger_data"); then fail "missing ledger report did not exit 0"; fi
+if ! no_ledger_output=$(env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$tmp_dir/empty-ledger-codex-home" sh "$ledger_report" --data-dir "$empty_ledger_data"); then fail "missing ledger report did not exit 0"; fi
 after=$(snapshot_files "$empty_ledger_data")
 [ "$before" = "$after" ] || fail "missing ledger report mutated the data directory"
 printf '%s\n' "$no_ledger_output" | grep -Fq "no ledger found at $empty_ledger_data/review-budget.jsonl" || fail "missing ledger report omitted the clean message"
@@ -280,6 +380,7 @@ liveness_status=$liveness_data/hook-status.json
 if grep -q '<<' "$script_dir/check-hook-trust.sh"; then fail "check-hook-trust.sh uses a here-document, which needs a temp file and fails in a read-only sandbox"; fi
 if grep -q '<<' "$data_dir_resolver"; then fail "resolve-data-dir.sh uses a here-document"; fi
 if grep -q '<<' "$ledger_report"; then fail "ledger-report.sh uses a here-document"; fi
+if grep -q '<<' "$challenge"; then fail "challenge.sh uses a here-document"; fi
 liveness_payload='{"hook_event_name":"PreToolUse","tool_name":"exec","session_id":"liveness-session","cwd":"/fixture","tool_input":{}}'
 if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "liveness payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "liveness payload produced stdout"
@@ -491,10 +592,24 @@ print("three exact role pins are valid")
 PY
 pass "exact three-role TOML inventory"
 
+grep -Fq 'Scarcity here is ordered' "$skill" || fail "skill is missing ordered scarcity"
+grep -Fq 'Codex tokens. The abundant resource.' "$skill" || fail "skill is missing abundant Codex token doctrine"
+obsolete_scarcity_word=scarcest
+if grep -Fq "$obsolete_scarcity_word resource" "$skill"; then fail "skill retains obsolete scarcity claim"; fi
+for document in "$skill" "$contracts" "$reviewer_template"; do
+  grep -Fq 'Scope inflation is a defect' "$document" || fail "scope-inflation rule is missing in $document"
+done
+grep -Fq 'Cycle 1 already defined the complete finding set.' "$contracts" || fail "review cycle-1 scope freeze is missing"
+grep -Fq 'Stay under 300 words' "$contracts" || fail "reviewer word limit is missing"
+pass "ordered scarcity, scope discipline, and bounded reviewer contract"
+
 grep -Fq "legacy_terra_sha256=$legacy_terra_sha256" "$installer" || fail "installer legacy Terra digest mismatch"
 grep -Fq "legacy_luna_sha256=$legacy_luna_sha256" "$installer" || fail "installer legacy Luna digest mismatch"
 grep -Fq "prev_sol_sha256=$prev_sol_sha256" "$installer" || fail "installer previous Sol digest mismatch"
 pass "immutable v0.2.0 migration fingerprints"
+grep -Fq "legacy_consultant_file=$legacy_consultant_file" "$installer" || fail "installer legacy consultant filename mismatch"
+grep -Fq "legacy_consultant_sha256=$legacy_consultant_sha256" "$installer" || fail "installer legacy consultant digest mismatch"
+pass "retired Sol consultant migration fingerprint"
 
 clean_target=$tmp_dir/clean
 sh "$installer" --target-dir "$clean_target"
@@ -502,6 +617,7 @@ cmp -s "$templates/sol-advisor-luna-implementer.toml" "$clean_target/sol-advisor
 cmp -s "$templates/$sol_file" "$clean_target/$sol_file" || fail "clean Sol install mismatch"
 cmp -s "$templates/$floor_file" "$clean_target/$floor_file" || fail "clean floor-lane install mismatch"
 test ! -e "$clean_target/$terra_file" || fail "clean install created retired Terra role"
+test ! -e "$clean_target/$legacy_consultant_file" || fail "clean install created retired Sol consultant role"
 sh "$installer" --target-dir "$clean_target" --check
 before=$(snapshot_files "$clean_target")
 sh "$installer" --target-dir "$clean_target"
@@ -520,18 +636,29 @@ cmp -s "$templates/sol-advisor-luna-implementer.toml" "$codex_home/agents/sol-ad
 cmp -s "$templates/$sol_file" "$codex_home/agents/$sol_file" || fail "CODEX_HOME Sol mismatch"
 cmp -s "$templates/$floor_file" "$codex_home/agents/$floor_file" || fail "CODEX_HOME floor-lane mismatch"
 test ! -e "$codex_home/config.toml" || fail "installer created config.toml"
+test ! -e "$codex_home/agents/$legacy_consultant_file" || fail "CODEX_HOME install created retired Sol consultant role"
 relative_parent=$tmp_dir/relative-parent
 mkdir "$relative_parent"
 (cd "$relative_parent" && sh "$installer" --target-dir relative-agents)
 cmp -s "$templates/sol-advisor-luna-implementer.toml" "$relative_parent/relative-agents/sol-advisor-luna-implementer.toml" || fail "relative target Implementer mismatch"
 pass "CODEX_HOME and relative target behavior"
 
+consultant_target=$tmp_dir/consultant-removal
+sh "$installer" --target-dir "$consultant_target"
+write_legacy_consultant "$consultant_target"
+if sh "$installer" --target-dir "$consultant_target" --check; then fail "--check accepted retired Sol consultant"; fi
+test -e "$consultant_target/$legacy_consultant_file" || fail "consultant check refusal removed the retired file"
+sh "$installer" --target-dir "$consultant_target"
+test ! -e "$consultant_target/$legacy_consultant_file" || fail "installer did not remove exact legacy Sol consultant"
+sh "$installer" --target-dir "$consultant_target" --check
+pass "retired Sol consultant check refusal and exact removal"
+
 migration_target=$tmp_dir/migration
 write_legacy_roles "$migration_target"
 sh "$installer" --target-dir "$migration_target"
 cmp -s "$templates/sol-advisor-luna-implementer.toml" "$migration_target/sol-advisor-luna-implementer.toml" || fail "current Implementer was not installed"
 cmp -s "$templates/$sol_file" "$migration_target/$sol_file" || fail "Sol changed during migration"
-test ! -e "$migration_target/$luna_file" || fail "exact legacy Luna was not removed"
+test ! -e "$migration_target/$terra_file" || fail "exact legacy Terra was not removed"
 sh "$installer" --target-dir "$migration_target" --check
 pass "migration to Luna/Max implementer with v0.2.0 legacy cleanup"
 
@@ -568,6 +695,17 @@ after=$(snapshot_files "$modified_terra")
 [ "$before" = "$after" ] || fail "modified-Terra refusal partially mutated target"
 pass "modified Terra refusal with zero partial mutation"
 
+modified_consultant=$tmp_dir/modified-consultant
+sh "$installer" --target-dir "$modified_consultant"
+write_legacy_consultant "$modified_consultant"
+printf '%s\n' modified >> "$modified_consultant/$legacy_consultant_file"
+before=$(snapshot_files "$modified_consultant")
+if sh "$installer" --target-dir "$modified_consultant"; then fail "installer removed modified Sol consultant"; fi
+after=$(snapshot_files "$modified_consultant")
+[ "$before" = "$after" ] || fail "modified-consultant refusal partially mutated target"
+test -e "$modified_consultant/$legacy_consultant_file" || fail "modified-consultant refusal removed the file"
+pass "modified Sol consultant refusal with zero partial mutation"
+
 stale_terra=$tmp_dir/stale-terra
 sh "$installer" --target-dir "$stale_terra"
 stale_fixture=$tmp_dir/stale-fixture
@@ -578,6 +716,16 @@ if sh "$installer" --target-dir "$stale_terra" --check; then fail "--check accep
 after=$(snapshot_files "$stale_terra")
 [ "$before" = "$after" ] || fail "stale-Terra check mutated target"
 pass "stale Terra check refusal is non-mutating"
+
+stale_consultant=$tmp_dir/stale-consultant
+sh "$installer" --target-dir "$stale_consultant"
+write_legacy_consultant "$stale_consultant"
+before=$(snapshot_files "$stale_consultant")
+if sh "$installer" --target-dir "$stale_consultant" --check; then fail "--check accepted stale Sol consultant"; fi
+after=$(snapshot_files "$stale_consultant")
+[ "$before" = "$after" ] || fail "stale-consultant check mutated target"
+test -e "$stale_consultant/$legacy_consultant_file" || fail "stale-consultant check removed the file"
+pass "stale Sol consultant check refusal is non-mutating"
 
 unsafe=$tmp_dir/unsafe
 mkdir "$unsafe"
@@ -624,7 +772,7 @@ grep -Fq '../../scripts/install-agents.sh' "$preflight" || fail "preflight does 
 grep -Fq '../../scripts/inspect-agent-runtime.sh' "$preflight" || fail "preflight does not resolve inspector relatively"
 grep -Fqi 'public native spawn/details metadata first' "$preflight" || fail "preflight lacks public-details-first evidence rule"
 grep -Fqi 'parent captures and verifies exact before-and-after' "$contracts" || fail "contracts lack behavioral read-only state check"
-if rg -n 'sol_advisor_terra_implementer|sol-advisor-terra-implementer' "$readme" "$plugin_dir" | grep -Fqv 'legacy\|retired'; then fail "unreferred Terra implementer remains in docs"; fi
+if rg --glob '!**/scripts/verify.sh' --glob '!**/scripts/install-agents.sh' -n 'sol_advisor_terra_implementer|sol-advisor-terra-implementer' "$readme" "$plugin_dir" | grep -Eqv 'legacy|retired'; then fail "unreferred Terra implementer remains in docs"; fi
 pass "three-lane documentation and no per-spawn overrides"
 
 grep -Fq 'COMMITMENT BOUNDARY' "$review_hook" || fail "hook no longer recognizes the consult exemption marker"
@@ -648,6 +796,7 @@ sh -n "$runtime_inspector"
 sh -n "$script_dir/check-hook-trust.sh"
 sh -n "$data_dir_resolver"
 sh -n "$ledger_report"
+sh -n "$challenge"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 

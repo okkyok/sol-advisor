@@ -52,7 +52,8 @@ spawning a lane, complete steps 4-5 before accepting its result:
    ~~~
 
    It must exit zero. This proves Luna, Sol, and the Luna floor lane match the
-   shipped templates exactly and the retired Luna companion file is absent. If the
+   shipped templates exactly and the retired companion files for `sol_advisor_terra_implementer`
+   and `sol_advisor_sol_consultant` are absent. If the
    check reports a missing, stale, unsafe, or conflicting file, stop the affected
    lane. Give the user the installer path and reported destination. Never work
    around failure with another agent, model, or effort.

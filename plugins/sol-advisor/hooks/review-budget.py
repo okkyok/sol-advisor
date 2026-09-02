@@ -34,7 +34,7 @@ def main():
                 .isoformat()
                 .replace("+00:00", "Z"),
                 "session_id": payload.get("session_id"),
-                "plugin_version": "0.7.0",
+                "plugin_version": "0.8.0",
             }
             tool_input_text = json.dumps(
                 payload.get("tool_input"), separators=(",", ":"), ensure_ascii=False
