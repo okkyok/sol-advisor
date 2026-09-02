@@ -14,4 +14,7 @@ reasonable designs, or the files do not look as described, stop and report the g
 rather than improvising; a wrong guess here costs more than the round trip this lane
 saves. Run the requested verification and report actual evidence. Do not silently
 substitute a different role, model, or reasoning level.
+
+You are a leaf worker. Never spawn or delegate to another agent; implement directly in
+this session.
 """

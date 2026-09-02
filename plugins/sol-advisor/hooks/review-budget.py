@@ -58,14 +58,14 @@ def main():
         tool_input = payload.get("tool_input")
         if not isinstance(tool_input, dict):
             return
-        if tool_input.get("agent_type") != "sol_advisor_sol_reviewer":
+        agent_type = tool_input.get("agent_type")
+        if agent_type not in ("sol_advisor_sol_reviewer", "sol_advisor_sol_consultant"):
             return
 
-        # Every reviewer spawn counts unless it is explicitly marked as a
-        # commitment-boundary consult. The exemption is opt-in on purpose: a
-        # forgotten marker costs one review cycle, while the reverse default
-        # would let a forgotten marker grant an unbounded review loop to the
-        # one party with an incentive to keep reviewing.
+        # Final reviewer spawns are budgeted unless they carry the explicit
+        # commitment-boundary marker. The distinct Sol / Medium consultant records
+        # an auditable consultation and never consumes a review cycle.
+        is_consultant = agent_type == "sol_advisor_sol_consultant"
         message = tool_input.get("message", "")
         exempt = isinstance(message, str) and "COMMITMENT BOUNDARY" in message
 
@@ -120,12 +120,9 @@ def main():
                 record.update(fields)
                 return record
 
-            if exempt:
-                # Recorded, not counted. An exempt spawn right after a denial is
-                # the signature of a final review relabelled as a consult, and
-                # ledger-report.sh reports it.
+            if is_consultant or exempt:
                 try:
-                    append_record(stamped("consult", used=count))
+                    append_record(stamped("consult", used=count, agent_type=agent_type))
                 except BaseException:
                     pass
                 return

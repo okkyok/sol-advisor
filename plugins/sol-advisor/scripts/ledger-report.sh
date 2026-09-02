@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -eu
+
 usage() {
   printf '%s\n' "Usage: $0 [--data-dir PATH]" >&2
 }
@@ -60,8 +62,12 @@ previous_event_by_session = {}
 reset_count = 0
 reset_sessions = set()
 consult_count = 0
+consultant_consult_count = 0
+reviewer_consult_count = 0
+legacy_consult_count = 0
+unknown_consult_count = 0
 bypass_reset = 0
-bypass_consult = 0
+bypass_reviewer_consult = 0
 for record in records:
     session_id = record.get("session_id")
     session_key = json.dumps(session_id, sort_keys=True, separators=(",", ":"))
@@ -77,14 +83,23 @@ for record in records:
         reset_sessions.add(session_key)
     if event == "consult":
         consult_count += 1
+        agent_type = record.get("agent_type")
+        if agent_type == "sol_advisor_sol_consultant":
+            consultant_consult_count += 1
+        elif agent_type == "sol_advisor_sol_reviewer":
+            reviewer_consult_count += 1
+        elif agent_type is None:
+            legacy_consult_count += 1
+        else:
+            unknown_consult_count += 1
     # A denial is the stop condition firing. Whatever the session does next in
     # the same session is the only place a bypass can show up: a reset that
-    # restarts the budget, or a final review relabelled as an exempt consult.
+    # restarts the budget, or a final reviewer relabelled as a marker-exempt consult.
     if previous_event_by_session.get(session_key) == "denied":
         if event == "new-deliverable":
             bypass_reset += 1
-        elif event == "consult":
-            bypass_consult += 1
+        elif event == "consult" and record.get("agent_type") == "sol_advisor_sol_reviewer":
+            bypass_reviewer_consult += 1
     previous_event_by_session[session_key] = event
 
 deliverables = [
@@ -109,8 +124,9 @@ print(f"Deliverables: {deliverable_count}")
 print(f"Cycles used: 1 cycle={cycles.count(1)}, 2 cycles={cycles.count(2)}, 3 cycles={cycles.count(3)}")
 print(f"Deliverables that hit the cap: {cap_hits} ({cap_rate:.1f}%)")
 print(f"New-deliverable records: {reset_count} from {len(reset_sessions)} distinct session_ids")
-print(f"Exempt consults: {consult_count}")
-print(f"Bypass signatures after a denial: {bypass_reset + bypass_consult} (reset={bypass_reset}, consult={bypass_consult})")
+print(f"Consult records: {consult_count} (consultant={consultant_consult_count}, marker-exempt reviewer={reviewer_consult_count}, legacy without agent_type={legacy_consult_count}, unknown agent_type={unknown_consult_count})")
+print(f"Legacy consult records without agent_type (not counted as bypass): {legacy_consult_count}")
+print(f"Bypass signatures after a denial (reset or marker-exempt reviewer consult): {bypass_reset + bypass_reviewer_consult} (reset={bypass_reset}, reviewer-consult={bypass_reviewer_consult})")
 print("Verdict:")
 if not records:
     print("- No data yet, the budget has never been exercised.")
@@ -119,8 +135,8 @@ else:
     if cap_rate > 25.0:
         print("- The cap-hit rate is above 25%; scope freezing is not working and the finding set keeps growing.")
         warned = True
-    if bypass_reset + bypass_consult > 0:
-        print("- A denial was followed immediately by a reset or an exempt consult; the budget is being routed around rather than respected.")
+    if bypass_reset + bypass_reviewer_consult > 0:
+        print("- A denial was followed immediately by a reset or a marker-exempt reviewer consult; the budget is being routed around rather than respected.")
         warned = True
     if not warned:
         print("- The ledger does not show any budget warning condition.")' "$ledger_path"

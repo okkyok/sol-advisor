@@ -1,13 +1,13 @@
 ---
 name: orchestration
-description: "Codex-native architect and delegation workflow using separately installed custom agents: a GPT-5.6 Luna implementer at max reasoning, a GPT-5.6 Luna floor lane at medium reasoning for mechanical edits, and a fresh GPT-5.6 Sol reviewer at high reasoning with a requested read-only profile. Use for classifying a task and choosing a lane, delegated implementation, multi-task builds, features, bug fixes, refactors, migrations, five-part implementation specs, parent verification, commitment-boundary advice, and the budgeted final Sol review."
+description: "Codex-native architect and delegation workflow using separately installed custom agents: a GPT-5.6 Luna implementer at max reasoning, a GPT-5.6 Luna floor lane at medium reasoning for mechanical edits, a GPT-5.6 Sol / Medium commitment-boundary consultant, and a fresh GPT-5.6 Terra reviewer at high reasoning with a requested read-only profile. Use for classifying a task and choosing a lane, delegated implementation, multi-task builds, features, bug fixes, refactors, migrations, five-part implementation specs, parent verification, commitment-boundary advice, and the budgeted final review."
 ---
 
 # Sol Advisor Orchestration
 
 Act as the architect. Own the user's intent, architecture, decomposition, complete
 implementation specification, parent verification, and final acceptance. Delegate all
-implementation to the native Luna / Max role, then require a fresh Sol verdict before
+implementation to the native Luna / Max role, then require a fresh Terra verdict before
 reporting the deliverable complete. These are native Codex custom-agent threads, not a
 nested Codex CLI wrapper or a global default-subagent setting.
 
@@ -86,8 +86,8 @@ exceptions below.
 | implement | Write or edit code, tests, or config against a specification. | Luna / Max |
 | explore | Read or search the codebase or history to answer a question. | Luna / Max |
 | ingest | Absorb external material (docs, logs, large files) into usable form. | Luna / Max |
-| review | Judge a completed change set against a stated goal. | Fresh Sol reviewer |
-| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Luna / Max, after a commitment-boundary Sol consult |
+| review | Judge a completed change set against a stated goal. | Fresh Terra reviewer |
+| hardest | Work whose difficulty or ambiguity exceeds what a spec can bound. | Luna / Max, after a Sol / Medium commitment-boundary consult |
 
 The floor lane's name is `sol_advisor_luna_committer`.
 
@@ -122,7 +122,7 @@ Keep work in the primary session only for one of these five named reasons:
    in the primary session.
 3. Architect work by definition: decomposition, interface design, hypothesis
    selection, spec writing, and judging verification evidence.
-4. The final review gate: the fresh Sol review never moves into the primary session.
+4. The final review gate: the fresh Terra review never moves into the primary session.
 5. Tooling the lane cannot reach: primary-session plugins, MCP servers, or browser
    access a custom-agent thread does not have.
 
@@ -188,36 +188,44 @@ session before accepting it, and write the assertion that would have caught it.
 ## Consult Sol at commitment boundaries
 
 Before a consequential architecture, migration, public API, or wide refactor, spawn a
-fresh reviewer using the commitment-boundary packet from the role contracts:
+fresh Sol / Medium consultant using the commitment-boundary packet from the role contracts:
 
 ~~~text
-agent_type: sol_advisor_sol_reviewer
+agent_type: sol_advisor_sol_consultant
 fork_turns: none
 ~~~
 
-The role pins Sol / High and requests read-only isolation. Omit per-spawn model and
+The role pins Sol / Medium and requests read-only isolation. Omit per-spawn model and
 reasoning fields. Observe actual routing, sandbox, and permission metadata. The
 primary session remains responsible for the decision.
 
-Open the consult packet with the literal `COMMITMENT BOUNDARY` marker. Without it the
-consult consumes one of the deliverable's three final-review cycles, which is the safe
-direction to fail but still a cost worth avoiding.
+Open the consult packet with the literal `COMMITMENT BOUNDARY` marker. It is mandatory
+and identifies the Sol / Medium commitment-boundary consultation; the separate
+consultant agent type does not consume a final-review cycle.
 
-## Require the final Sol review
+## Require the final Terra review
 
-After implementation and parent verification, always spawn a new, fresh reviewer:
+After implementation and parent verification, always spawn a new, fresh Terra reviewer:
 
 ~~~text
 agent_type: sol_advisor_sol_reviewer
 fork_turns: none
 ~~~
 
-Use the final-review packet from the role contracts. Instruct the reviewer to remain
+The role pins Terra / High and requests read-only isolation. Use the final-review packet
+from the role contracts. Instruct the reviewer to remain
 behaviorally read-only, inspect the actual files and accumulated diff, and return
 exactly `ship`, `fix-first`, or `rethink`.
 
-Scope inflation is a defect there, not a preference: an artifact the stated objective did
-not ask for fails that objective the way a missing requirement does.
+Scope inflation is a defect, not a preference. A change set that delivers artifacts the
+stated objective did not ask for — unrequested options, unused abstraction,
+speculative hardening, configuration nobody requested — fails the objective the way a
+missing requirement does. The finding names the surplus artifact and the objective it
+does not serve. Judge this against the stated objective only, never against a preferred
+design: alternative implementations, naming, and structure stay DEFERRED. "Correct and
+complete for the stated goal" means the goal is met and nothing beyond it was delivered.
+When that holds, the verdict is ship even though a different implementation would have
+been possible.
 
 - `ship`: report completion with verification evidence.
 - `fix-first`: delegate the required fixes, verify again, and obtain a new review
@@ -225,8 +233,8 @@ not ask for fails that objective the way a missing requirement does.
 - `rethink`: revise architecture and do not report completion. A `rethink` consumes a
   review cycle like any other verdict.
 
-Never let the reviewer implement its own fixes. A Sol-on-Sol review is context-clean,
-not model-family-independent.
+Never let the reviewer implement its own fixes. A Terra review of Sol's orchestration is
+context-clean and different-model within the same vendor; it is not cross-vendor review.
 
 Apply the observed sandbox policy:
 
@@ -249,7 +257,8 @@ re-reviews. Count every final review, including one that follows a `rethink`.
 
 The plugin's `PreToolUse` hook counts each `tool_input.agent_type` equal to
 `sol_advisor_sol_reviewer`, regardless of the host-provided tool name, and denies the
-fourth at the host level. The primary session does not maintain the count. The hook
+fourth at the host level. The Sol / Medium consultant is a separate, uncounted
+commitment-boundary lane. The primary session does not maintain the count. The hook
 maintains `$PLUGIN_DATA/review-budget.jsonl`; read that ledger to see how many cycles this
 deliverable has used. Denials are recorded in the same ledger. The
 `scripts/ledger-report.sh` helper summarizes how the budget is actually being used. Do
@@ -260,16 +269,15 @@ Before the first final review, run the preflight's hook-liveness check at
 INERT` means the budget is prose again; report that plainly in the final report rather
 than assuming enforcement.
 
-The marker contract fails safe. Every spawn of `sol_advisor_sol_reviewer` consumes a
-cycle unless its packet carries the literal `COMMITMENT BOUNDARY` marker, which exempts
-a commitment-boundary consult. Forgetting the marker on a consult costs one review
-cycle; no omission anywhere grants an unbounded review loop. The exemption is opt-in
-precisely because the party composing the packet is the party with an incentive to keep
-reviewing.
+The marker contract remains mandatory in every Sol / Medium consultant packet. The
+consultant uses a distinct agent type and therefore does not consume a final review
+cycle. Every final reviewer spawn of `sol_advisor_sol_reviewer` consumes a
+cycle. The marker is an auditable protocol requirement and does not alter the final-review
+budget. No final-review budget is granted by relabelling a final review as a consult.
 
-Exempt spawns are recorded as `consult` entries rather than dropped, so relabelling a
-final review as a consult is auditable instead of invisible: `ledger-report.sh` reports
-an exempt consult or a reset that immediately follows a denial as a bypass signature.
+Consult spawns are recorded separately, so the consultation path remains auditable.
+`ledger-report.sh` reports a consult or a reset that immediately follows a denial as a
+bypass signature.
 
 The budget is keyed to the session and belongs to the deliverable. Never reset it because
 context was compacted, the specification was corrected, the architecture was revised,
@@ -314,7 +322,7 @@ Use exactly one Challenger call only for these triggers:
   returning something other than `ship`; a finding survived two consecutive fix cycles or
   reappeared; or a `rethink` arrived at cycle 2 or later. Make exactly one call before handing
   control back to the user, and attach its reply. This is the highest-value trigger because a
-  Sol reviewer that cannot converge in three cycles is exactly where a correlated model-family
+  Terra reviewer that cannot converge in three cycles is exactly where a correlated model-family
   blind spot is suspected, and because the stop conditions themselves are structurally rare.
 - `irreversible`: the change is a data migration, a public API, an auth, billing, or permission
   boundary, or a deletion. This is not every commitment boundary; it is only what cannot be
@@ -331,7 +339,7 @@ Its reply is evidence for the architect's decision, not a verdict that overrides
 reviewer's `ship`, `fix-first`, or `rethink` verdict.
 
 The budget is bounded by this trigger list and by `challenge.sh` refusing to run without a
-declared trigger. It is deliberately not enforced by a `PreToolUse` hook the way the Sol review
+declared trigger. It is deliberately not enforced by a `PreToolUse` hook the way the final-review
 budget is. The triggers are structurally rare, so machine enforcement here would be complexity
 built ahead of evidence. `challenger.jsonl` is the instrument: if it shows the triggers firing
 more often than the stop conditions above actually warrant, add enforcement then, not before.
@@ -361,7 +369,7 @@ repository, which is public, because entries carry task descriptions.
 Fields:
 
 ~~~json
-{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_luna_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
+{"ts":"<ISO8601>","task":"<short label>","class":"commit|implement|explore|ingest|review|hardest","lane":"sol_advisor_luna_implementer|sol_advisor_luna_committer|sol_advisor_sol_reviewer|sol_advisor_sol_consultant|architect","exception":null,"outcome":"success|spec-retry|reclassified|stopped|abandoned","attempts":1,"duration_s":540,"note":""}
 ~~~
 
 - `lane: "architect"` with `exception: 1-5` records work kept in the primary session, and

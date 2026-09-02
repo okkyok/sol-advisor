@@ -4,7 +4,7 @@ Complete this preflight before the first delegation in a session and before acce
 any lane's result. These are the same checks [SKILL.md](../SKILL.md) points to;
 nothing here supersedes it.
 
-The three role files are user-owned native custom-agent TOML files. Installing or
+The four role files are user-owned native custom-agent TOML files. Installing or
 updating the plugin does not automatically register them. Install them separately and
 start a fresh Codex task so native discovery sees the current profiles.
 
@@ -51,18 +51,19 @@ spawning a lane, complete steps 4-5 before accepting its result:
    sh "$installer" --check
    ~~~
 
-   It must exit zero. This proves Luna, Sol, and the Luna floor lane match the
-   shipped templates exactly and the retired companion files for `sol_advisor_terra_implementer`
-   and `sol_advisor_sol_consultant` are absent. If the
+   It must exit zero. This proves the four current role files match the shipped
+   templates exactly and the retired companion file for `sol_advisor_terra_implementer`
+   is absent. If the
    check reports a missing, stale, unsafe, or conflicting file, stop the affected
    lane. Give the user the installer path and reported destination. Never work
    around failure with another agent, model, or effort.
 
-3. Inspect the native spawn tool's available `agent_type` entries. All three exact
+3. Inspect the native spawn tool's available `agent_type` entries. All four exact
    names must be exposed:
 
    - `sol_advisor_luna_implementer`
-   - `sol_advisor_sol_reviewer`
+   - `sol_advisor_sol_reviewer` (Terra / High final review)
+   - `sol_advisor_sol_consultant` (Sol / Medium commitment consultation)
    - `sol_advisor_luna_committer`
 
    If any is missing, tell the user to install/check the companion files, start a
@@ -85,11 +86,12 @@ spawning a lane, complete steps 4-5 before accepting its result:
    The helper's allowlisted output is the authoritative local fallback for omitted
    model and effort. If public and local values both exist, they must agree. Accepted
    values are Luna / max for judgment-bearing implementation, Luna / medium for
-   the floor lane, and Sol / high for review. Missing, inconsistent, unavailable, or
+   the floor lane, Terra / high for final review, and Sol / medium for commitment
+   consultation. Missing, inconsistent, unavailable, or
    unobservable routing stops that lane.
 
-5. For every Sol review, capture the observed sandbox policy type and permission
-   profile type. The shipped reviewer requests read-only sandboxing, but the host may
+5. For every Terra review and Sol consultation, capture the observed sandbox policy type
+   and permission profile type. Both roles request read-only sandboxing, but the host may
    broaden it. Never call the review OS-enforced read-only unless the observed sandbox
    policy type is `read-only`.
 

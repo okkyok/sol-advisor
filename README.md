@@ -1,6 +1,6 @@
 # Sol Advisor
 
-**Sol runs the show. Luna / Max handles implementation, and a fresh Sol review
+**Sol runs the show. Luna / Max handles implementation, and a fresh Terra review
 with a requested read-only profile stands between the diff and done.**
 
 Sol Advisor is a Codex-native architect workflow for capability-routed software
@@ -15,15 +15,16 @@ I write [**Attention Heads**](https://attentionheads.substack.com/?utm_source=gi
 |---|---|---|---|
 | Orchestrator | Primary session | GPT-5.6 Sol / Medium | Requirements, architecture, decomposition, routing, and acceptance |
 | Implementation | sol_advisor_luna_implementer | GPT-5.6 Luna / Max | Bounded work specified by the Sol orchestrator |
+| Consultant | sol_advisor_sol_consultant | GPT-5.6 Sol / Medium | Commitment-boundary consults before hardest work |
 | Floor | sol_advisor_luna_committer | GPT-5.6 Luna / Medium | Mechanical, fully-determined edits the specification leaves nothing to decide in |
-| Final review | sol_advisor_sol_reviewer | GPT-5.6 Sol / High / requests read-only | Fresh review of the actual diff and verification evidence |
+| Final review | sol_advisor_sol_reviewer | GPT-5.6 Terra / High / requests read-only | Fresh review of the actual diff and verification evidence |
 | Challenger | `scripts/challenge.sh` (external `claude` CLI, not a native agent) | Claude Opus | deadlock, irreversible, user-request |
 
-The final review is context-independent, not model-family-independent: Sol reviews
-Sol's orchestration with a fresh context. That catches conversational assumptions, but
-it is not cross-vendor review. That gap now has a named, bounded remedy—the Challenger—for
-deadlock, irreversible, and user-request triggers; it is rare and triggered, not a routine
-substitute for cross-vendor review.
+The final review is context-independent and different-model within the same vendor: Terra
+reviews Sol's orchestration with a fresh context. That catches conversational assumptions,
+but it is not cross-vendor review. The Challenger remains the only cross-vendor check; it
+is a rare, bounded remedy for deadlock, irreversible, and user-request triggers, not a
+routine substitute for the final review.
 
 For the exact triggers `deadlock`, `irreversible`, and `user-request`, the Challenger is
 invoked as a plain shell command via `scripts/challenge.sh`, not a native custom agent.
@@ -37,7 +38,7 @@ Requirements:
 
 - A current Codex CLI or ChatGPT desktop app with plugins, native subagents, and
   custom agents enabled.
-- Access to GPT-5.6 Sol and GPT-5.6 Luna at the reasoning efforts in the table above.
+- Access to GPT-5.6 Sol, GPT-5.6 Luna, and GPT-5.6 Terra at the reasoning efforts in the table above.
 - jq, which the companion-install lookup uses to locate the installed plugin package.
 
 Add the GitHub repository as a Codex marketplace, then install the plugin:
@@ -73,7 +74,7 @@ Then select GPT-5.6 Sol with Medium reasoning for the primary session and ask fo
 implementation work normally, or invoke the orchestration skill explicitly:
 
 ~~~text
-Use $sol-advisor:orchestration to build this feature, verify it, and obtain the final Sol review before reporting done.
+Use $sol-advisor:orchestration to build this feature, verify it, and obtain the final Terra review before reporting done.
 ~~~
 
 ## Check and update
@@ -101,11 +102,10 @@ sh "$plugin_dir/scripts/install-agents.sh" --check
 Version 0.4.0 recognizes only byte-exact v0.2.0 legacy `sol-advisor-luna-implementer.toml` and `sol-advisor-terra-implementer.toml` files.
 The installer also migrates the previous shipped Sol reviewer template so a
 project-changed shipped template is not refused as a conflict.
-Normal installer mode installs the current role templates, removes the exact retired
-Terra and Sol consultant files, and refuses modified, nonregular,
-or symlinked destinations without partial agent-file mutation. `--check` is
-non-mutating and fails until all three current role files match exactly and no
-retired file remains.
+Normal installer mode installs the four current role templates, removes the exact retired
+Terra implementer file, and refuses modified, nonregular, or symlinked destinations
+without partial agent-file mutation. `--check` is non-mutating and fails until all four
+current role files match exactly and the retired Terra file is absent.
 This routing update was motivated by
 [Eric Provencher's X post](https://x.com/pvncher/status/2083300990350954981).
 
@@ -149,19 +149,19 @@ acceptance in the primary session.
 Before delegation and acceptance, the skill requires all of the following:
 
 1. The installed role files pass the byte-for-byte companion check.
-2. The native spawn tool exposes both exact names in the table above.
+2. The native spawn tool exposes all four exact names in the table above.
 3. Public native spawn/details metadata identifies the selected role and, when exposed,
    its expected model and effort. If model or effort is omitted, the exact-rollout local
    inspector above must provide them instead.
-4. The reviewer’s observed sandbox policy type and permission profile type are captured
-   and reported.
+4. The reviewer’s and consultant’s observed sandbox policy and permission profile types
+   are captured and reported.
 
 A missing, stale, conflicting, unavailable, inconsistent, or unobservable
 role/model/effort stops the affected lane with an actionable error. There is no silent
 model, reasoning, or agent-type fallback, and per-spawn calls do not override the role
 pins.
 
-The Sol reviewer TOML requests read-only sandboxing, but the host permission profile
+The Terra reviewer TOML requests read-only sandboxing, but the host permission profile
 may broaden that request. If the observed sandbox policy type is read-only, review can
 proceed with enforced isolation. If the host broadens it, review can proceed only as
 behaviorally read-only when hard isolation is not required, the prompt forbids edits,
@@ -170,7 +170,7 @@ the broader sandbox and permission profile must be reported as residual risk. If
 isolation is required, the sandbox cannot be observed, or any mutation occurs, stop the
 review lane and do not claim enforced read-only isolation.
 
-The orchestrator inspects every diff and reruns verification. A fresh Sol reviewer then
+The orchestrator inspects every diff and reruns verification. A fresh Terra reviewer then
 returns ship, fix-first, or rethink. The session cannot report completion until the
 reviewer returns ship. These remain native Codex subagent threads; Sol Advisor does not
 launch a nested Codex CLI process or globally reroute unrelated subagents.
@@ -188,20 +188,20 @@ unresolved findings and options to the user instead of spawning another lane.
 ### Machine-enforced review budget
 
 The three-review budget is enforced by a `PreToolUse` hook shipped with the plugin, not
-by convention. The hook counts every `tool_input.agent_type` equal to
-`sol_advisor_sol_reviewer`, regardless of the host-provided tool name, and exempts only
-a prompt carrying the literal
-`COMMITMENT BOUNDARY` marker, so a consult stays outside the budget while a final review
-that forgets a line is still counted. The exemption is opt-in in that direction on
-purpose: the party composing the packet is the party with an incentive to keep
-reviewing, so a forgotten marker must cost a cycle rather than grant an unbounded loop.
-Exempt spawns are written to the ledger as `consult` entries, which makes relabelling a
-final review as a consult auditable instead of invisible. It stores the session-keyed,
-auditable ledger at `$PLUGIN_DATA/review-budget.jsonl`; a new-deliverable record resets
-the count for a genuinely new deliverable in the same session. The hook fails open by
-design, so malformed input or an internal bug can never block a Codex session. Codex asks
-the user to trust a plugin's hooks on first use, and enforcement remains inert until that
-trust is granted.
+by convention. The hook recognizes `tool_input.agent_type` equal to either
+`sol_advisor_sol_reviewer` or `sol_advisor_sol_consultant`, regardless of the host-provided
+tool name. A consultant spawn is recorded as `consult` and never consumes a final-review
+cycle. A reviewer prompt carrying the literal `COMMITMENT BOUNDARY` marker is a second,
+auditable exemption path; a final reviewer that omits the marker is counted. The marker
+is opt-in in that direction on purpose: the party composing the packet is the party with
+an incentive to keep reviewing, so a forgotten marker must cost a cycle rather than grant
+an unbounded loop. Consult and marker-exempt spawns are written to the ledger as `consult`
+entries, which makes relabelling a final review auditable instead of invisible. It stores
+the session-keyed, auditable ledger at `$PLUGIN_DATA/review-budget.jsonl`; a
+new-deliverable record resets the count for a genuinely new deliverable in the same
+session. The hook fails open by design, so malformed input or an internal bug can never
+block a Codex session. Codex asks the user to trust a plugin's hooks on first use, and
+enforcement remains inert until that trust is granted.
 
 The hook writes a liveness heartbeat to `$PLUGIN_DATA/hook-status.json` on every
 `PreToolUse` event. `scripts/check-hook-trust.sh` reads it and reports `HOOK ACTIVE` or
@@ -222,7 +222,7 @@ destroy the liveness check.
 
 The skill classifies every task into one of six classes (commit, implement, explore,
 ingest, review, hardest) and routes it to the floor lane, Luna / Max, or the fresh
-Sol reviewer by default, keeping work in the primary session only for five named
+Terra reviewer by default, keeping work in the primary session only for five named
 exceptions: context-bound tasks, work below the measured spawn floor, architect work
 by definition, the final review gate, and tooling only the primary session can reach.
 A failed delegation gets one corrected re-specification; a second failure on the same

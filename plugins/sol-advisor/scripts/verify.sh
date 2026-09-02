@@ -1,5 +1,5 @@
 #!/bin/sh
-# Repository-local verification for Sol Advisor's three-role companion migration.
+# Repository-local verification for Sol Advisor's four-role companion migration.
 
 set -eu
 
@@ -38,15 +38,14 @@ trap cleanup 0 HUP INT TERM
 tmp_dir=$(mktemp -d "$tmp_base/sol-advisor-verify.XXXXXX") || fail "could not create disposable verification directory"
 
 terra_file=sol-advisor-terra-implementer.toml
-legacy_consultant_file=sol-advisor-sol-consultant.toml
+consultant_file=sol-advisor-sol-consultant.toml
 sol_file=sol-advisor-sol-reviewer.toml
 reviewer_template=$plugin_dir/agents/sol-advisor-sol-reviewer.toml
 floor_file=sol-advisor-luna-committer.toml
 luna_file=sol-advisor-luna-implementer.toml
 legacy_terra_sha256=06c318e5e93f37452635906394e6ea69fb6a65ba9e6ad7172d37b444e0dc871d
-legacy_consultant_sha256=9aa471a58979238ecb0073a0c3a8f770ae90415f7ead8b62f92136567456fde9
 legacy_luna_sha256=fba1b42849d93737e83b094a2ab0b1611f87ac37db7438c8bbdf581f0813f8eb
-prev_sol_sha256=b2e492c2c237ce22d7b8137430afb51325671d503b1e4aa1801eb702d03ffb62
+prev_sol_sha256='6832238b7a45d5761a0a108d1f35f1ea916a248382d9e565cbc6d6abf1e40021 ab8f81043bdbafc027e67d436f2e04b004bfab7be8964d1acb57ae3895edc78d b2e492c2c237ce22d7b8137430afb51325671d503b1e4aa1801eb702d03ffb62'
 
 snapshot_files() {
   target=$1
@@ -92,33 +91,106 @@ LEGACY_TERRA
   [ "$(shasum -a 256 "$target/$terra_file" | awk '{print $1}')" = "$legacy_terra_sha256" ] || fail "legacy Terra fixture digest drifted"
 }
 
-write_legacy_consultant() {
+write_previous_sol_reviewer() {
   target=$1
+  fixture=${2-operator}
   mkdir -p "$target"
-  cat > "$target/$legacy_consultant_file" <<'LEGACY_CONSULTANT'
-name = "sol_advisor_sol_consultant"
-description = "Sol Advisor's read-only Sol / Medium commitment-boundary consultation lane."
-model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+  case "$fixture" in
+    operator)
+      cat > "$target/$sol_file" <<'PREV_SOL_REVIEWER'
+name = "sol_advisor_sol_reviewer"
+description = "Sol Advisor's fresh, read-only final review lane using Terra for inspected diffs and evidence."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
 developer_instructions = """
-You are Sol Advisor's commitment-boundary consultant. Remain strictly read-only: do not
-create, modify, delete, format, or implement files. Review the proposed architecture,
-scope, interfaces, constraints, and alternatives in a fresh context. This lane is used
-only before hardest work and must not perform implementation or final review.
+You are Sol Advisor's fresh Terra final reviewer. Remain strictly read-only: do not create,
+modify, delete, format, or implement files, and do not broaden the requested scope.
+Inspect the actual files, accumulated change set, stated interfaces and constraints,
+and verification evidence in a fresh context.
 
-Return exactly one recommendation: proceed, change, or stop. Base it on the decisive
-question and concrete evidence. State the largest risk and the smallest change needed
-when recommending change. Do not silently substitute a different role, model, or
-reasoning level.
+Return exactly one verdict: ship, fix-first, or rethink. Base the verdict on concrete,
+evidence-backed findings. Use fix-first only for bounded required corrections and
+rethink when the architecture or scope must change. Do not silently substitute a
+different role, model, or reasoning level; this installed custom-agent profile is the
+required read-only review lane.
 
-You are a leaf worker. Never spawn or delegate to another agent; advise directly in
-this session. The hardest-lane chain (consultant then implementer) is sequenced by the
-primary session, not by you.
+Stay under 300 words because the reader is another model mid-task. A sound change set
+gets a one-line ship verdict; never manufacture objections to justify having been
+consulted. Findings must be defects that block the stated goal, not preferences. If
+the change set is correct and complete for the stated goal, the verdict is ship even
+when a different implementation would have been possible.
+
+You are a leaf worker. Never spawn or delegate to another agent; review directly in
+this session.
 """
-LEGACY_CONSULTANT
-  [ "$(shasum -a 256 "$target/$legacy_consultant_file" | awk '{print $1}')" = "$legacy_consultant_sha256" ] || fail "legacy consultant fixture digest drifted"
+PREV_SOL_REVIEWER
+      expected_digest=6832238b7a45d5761a0a108d1f35f1ea916a248382d9e565cbc6d6abf1e40021
+      ;;
+    2e8acff)
+      cat > "$target/$sol_file" <<'PREV_SOL_REVIEWER_2E8ACFF'
+name = "sol_advisor_sol_reviewer"
+description = "Sol Advisor's fresh, read-only final review lane using Terra for inspected diffs and evidence."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+
+developer_instructions = """
+You are Sol Advisor's fresh Terra final reviewer. Remain strictly read-only: do not create,
+modify, delete, format, or implement files, and do not broaden the requested scope.
+Inspect the actual files, accumulated change set, stated interfaces and constraints,
+and verification evidence in a fresh context.
+
+Return exactly one verdict: ship, fix-first, or rethink. Base the verdict on concrete,
+evidence-backed findings. Use fix-first only for bounded required corrections and
+rethink when the architecture or scope must change. Do not silently substitute a
+different role, model, or reasoning level; this installed custom-agent profile is the
+required read-only review lane.
+
+Stay under 300 words because the reader is another model mid-task. A sound change set
+gets a one-line ship verdict; never manufacture objections to justify having been
+consulted. Findings must be defects that block the stated goal, not preferences. If
+the change set is correct and complete for the stated goal, the verdict is ship even
+when a different implementation would have been possible.
+"""
+PREV_SOL_REVIEWER_2E8ACFF
+      expected_digest=ab8f81043bdbafc027e67d436f2e04b004bfab7be8964d1acb57ae3895edc78d
+      ;;
+    369073b)
+      cat > "$target/$sol_file" <<'PREV_SOL_REVIEWER_369073B'
+name = "sol_advisor_sol_reviewer"
+description = "Sol Advisor's fresh, read-only final review lane for inspected diffs and evidence."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+sandbox_mode = "read-only"
+
+developer_instructions = """
+You are Sol Advisor's fresh final reviewer. Remain strictly read-only: do not create,
+modify, delete, format, or implement files, and do not broaden the requested scope.
+Inspect the actual files, accumulated change set, stated interfaces and constraints,
+and verification evidence in a fresh context.
+
+Return exactly one verdict: ship, fix-first, or rethink. Base the verdict on concrete,
+evidence-backed findings. Use fix-first only for bounded required corrections and
+rethink when the architecture or scope must change. Do not silently substitute a
+different role, model, or reasoning level; this installed custom-agent profile is the
+required read-only review lane.
+
+Stay under 300 words because the reader is another model mid-task. A sound change set
+gets a one-line ship verdict; never manufacture objections to justify having been
+consulted. Findings must be defects that block the stated goal, not preferences. If
+the change set is correct and complete for the stated goal, the verdict is ship even
+when a different implementation would have been possible.
+"""
+PREV_SOL_REVIEWER_369073B
+      expected_digest=b2e492c2c237ce22d7b8137430afb51325671d503b1e4aa1801eb702d03ffb62
+      ;;
+    *)
+      fail "unknown previous Sol reviewer fixture: $fixture"
+      ;;
+  esac
+  [ "$(shasum -a 256 "$target/$sol_file" | awk '{print $1}')" = "$expected_digest" ] || fail "previous Sol reviewer fixture digest drifted: $fixture"
 }
 
 for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$data_dir_resolver" "$ledger_report" "$challenge" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
@@ -226,6 +298,12 @@ if ! hook_output=$(run_review_hook "$implementer_payload"); then fail "implement
 [ -z "$hook_output" ] || fail "implementer payload produced stdout"
 test ! -e "$hook_ledger" || fail "implementer payload created the review ledger"
 
+missing_agent_type_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"message":"COMMITMENT BOUNDARY\nNo agent type supplied."}}'
+if ! hook_output=$(run_review_hook "$missing_agent_type_payload"); then fail "payload without agent_type did not fail open"; fi
+[ -z "$hook_output" ] || fail "payload without agent_type produced stdout"
+test ! -e "$hook_ledger" || fail "payload without agent_type created the review ledger"
+pass "review-budget hook ignores payloads without an agent_type"
+
 consult_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"COMMITMENT BOUNDARY\nPre-implementation consult."}}'
 if ! hook_output=$(run_review_hook "$consult_payload"); then fail "consult payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "consult payload produced stdout"
@@ -235,7 +313,81 @@ jq -s -e '
   and (.[0].session_id == "budget-session")
   and (.[0].used == 0)
   and (.[0].cycle == null)
+  and (.[0].agent_type == "sol_advisor_sol_reviewer")
 ' "$hook_ledger" >/dev/null || fail "marked consult was not recorded as an uncounted consult"
+
+# The distinct sol_advisor_sol_consultant agent type is auditable and untested until
+# now: it must be recorded as an uncounted consult with no marker required, must never
+# consume a review cycle, and must never be denied -- including after the budget for
+# sol_advisor_sol_reviewer is exhausted. Use an isolated session and ledger so these
+# assertions cannot perturb the exact-count assertions already made on hook_ledger above.
+consultant_data=$tmp_dir/hook-consultant
+consultant_ledger=$consultant_data/review-budget.jsonl
+run_consultant_hook() {
+  printf '%s' "$1" | PLUGIN_DATA="$consultant_data" python3 "$review_hook"
+}
+
+consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"consultant-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_consultant","message":"Pre-implementation consult, no marker required."}}'
+if ! hook_output=$(run_consultant_hook "$consultant_payload"); then fail "sol_advisor_sol_consultant payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "sol_advisor_sol_consultant payload produced stdout"
+jq -s -e '
+  length == 1
+  and (.[0].event == "consult")
+  and (.[0].session_id == "consultant-session")
+  and (.[0].used == 0)
+  and (.[0].cycle == null)
+  and (.[0].agent_type == "sol_advisor_sol_consultant")
+' "$consultant_ledger" >/dev/null || fail "unmarked sol_advisor_sol_consultant spawn was not recorded as an uncounted consult"
+pass "unmarked sol_advisor_sol_consultant spawn is recorded as an uncounted consult"
+
+exempt_paths_data=$tmp_dir/hook-exempt-paths
+exempt_paths_ledger=$exempt_paths_data/review-budget.jsonl
+run_exempt_paths_hook() {
+  printf '%s' "$1" | PLUGIN_DATA="$exempt_paths_data" python3 "$review_hook"
+}
+exempt_paths_consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"exempt-paths-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_consultant","message":"Routine consultation."}}'
+exempt_paths_reviewer_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"exempt-paths-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"COMMITMENT BOUNDARY\nLegacy consultation marker."}}'
+if ! hook_output=$(run_exempt_paths_hook "$exempt_paths_consultant_payload"); then fail "consultant exempt-path payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "consultant exempt-path payload produced stdout"
+if ! hook_output=$(run_exempt_paths_hook "$exempt_paths_reviewer_payload"); then fail "reviewer exempt-path payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "reviewer exempt-path payload produced stdout"
+jq -s -e '
+  length == 2
+  and (map(.event) == ["consult", "consult"])
+  and (.[0].agent_type == "sol_advisor_sol_consultant")
+  and (.[1].agent_type == "sol_advisor_sol_reviewer")
+  and (.[0].agent_type != .[1].agent_type)
+' "$exempt_paths_ledger" >/dev/null || fail "exempt consultant and reviewer records were not distinguishable"
+pass "exempt consultant and marker-reviewer records preserve distinct agent types"
+
+consultant_reviewer_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"consultant-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"Please review the accumulated diff."}}'
+call=1
+while [ "$call" -le 3 ]; do
+  if ! hook_output=$(run_consultant_hook "$consultant_reviewer_payload"); then fail "reviewer call $call did not exit 0"; fi
+  [ -z "$hook_output" ] || fail "reviewer call $call produced stdout"
+  if ! hook_output=$(run_consultant_hook "$consultant_payload"); then fail "interleaved consultant call after reviewer $call did not fail open"; fi
+  [ -z "$hook_output" ] || fail "interleaved consultant call after reviewer $call produced stdout"
+  call=$((call + 1))
+done
+
+if ! hook_output=$(run_consultant_hook "$consultant_reviewer_payload"); then fail "budget-exhausting reviewer call did not exit 0"; fi
+printf '%s\n' "$hook_output" | jq -e '
+  .hookSpecificOutput.permissionDecision == "deny"
+' >/dev/null || fail "fourth reviewer call in the interleaved session was not denied"
+
+if ! hook_output=$(run_consultant_hook "$consultant_payload"); then fail "post-exhaustion consultant call did not fail open"; fi
+[ -z "$hook_output" ] || fail "post-exhaustion consultant call was denied like a reviewer spawn"
+
+jq -s -e '
+  length == 9
+  and (map(.event) == ["consult", "review", "consult", "review", "consult", "review", "consult", "denied", "consult"])
+  and (map(select(.event == "review")) | map(.cycle) == [1, 2, 3])
+  and (map(select(.event == "denied")) | length) == 1
+  and (map(select(.event == "consult")) | length) == 5
+  and (map(select(.event == "consult")) | map(.used) == [0, 1, 2, 3, 3])
+  and (map(.session_id) | unique == ["consultant-session"])
+' "$consultant_ledger" >/dev/null || fail "interleaved sol_advisor_sol_consultant spawns altered the reviewer budget, ordering, or denial behavior"
+pass "interleaved sol_advisor_sol_consultant spawns never consume the reviewer budget and are never denied, even after exhaustion"
 
 # The host may namespace its tool name or omit it entirely. Reviewer identity comes
 # from the exact agent type, while other agent types remain ignored.
@@ -304,8 +456,8 @@ printf '%s\n' "$ledger_output" | grep -Fq 'Deliverables: 1' || fail "ledger repo
 printf '%s\n' "$ledger_output" | grep -Fq '3 cycles=1' || fail "ledger report did not count three used cycles"
 printf '%s\n' "$ledger_output" | grep -Fq 'Deliverables that hit the cap: 1' || fail "ledger report did not count one cap hit"
 printf '%s\n' "$ledger_output" | grep -Fq 'scope freezing is not working' || fail "ledger report omitted the cap-hit verdict"
-printf '%s\n' "$ledger_output" | grep -Fq 'Exempt consults: 2' || fail "ledger report did not count exempt consults"
-printf '%s\n' "$ledger_output" | grep -Fq 'Bypass signatures after a denial: 1 (reset=0, consult=1)' || fail "ledger report did not detect the post-denial consult"
+printf '%s\n' "$ledger_output" | grep -Fq 'Consult records: 2 (consultant=0, marker-exempt reviewer=2, legacy without agent_type=0, unknown agent_type=0)' || fail "ledger report did not classify exempt reviewer consults"
+printf '%s\n' "$ledger_output" | grep -Fq 'Bypass signatures after a denial (reset or marker-exempt reviewer consult): 1 (reset=0, reviewer-consult=1)' || fail "ledger report did not detect the post-denial marker-reviewer consult"
 printf '%s\n' "$ledger_output" | grep -Fq 'routed around' || fail "ledger report omitted the bypass verdict"
 
 bypass_reset_data=$tmp_dir/bypass-reset
@@ -318,7 +470,7 @@ printf '%s\n' \
   '{"event":"new-deliverable","session_id":"s"}' \
   > "$bypass_reset_data/review-budget.jsonl"
 if ! bypass_output=$(sh "$ledger_report" --data-dir "$bypass_reset_data"); then fail "ledger report rejected the bypass fixture"; fi
-printf '%s\n' "$bypass_output" | grep -Fq 'Bypass signatures after a denial: 1 (reset=1, consult=0)' || fail "ledger report did not detect a reset immediately after a denial"
+printf '%s\n' "$bypass_output" | grep -Fq 'Bypass signatures after a denial (reset or marker-exempt reviewer consult): 1 (reset=1, reviewer-consult=0)' || fail "ledger report did not detect a reset immediately after a denial"
 
 clean_reset_data=$tmp_dir/clean-reset
 mkdir "$clean_reset_data"
@@ -328,8 +480,37 @@ printf '%s\n' \
   '{"event":"review","session_id":"s","cycle":1}' \
   > "$clean_reset_data/review-budget.jsonl"
 if ! clean_output=$(sh "$ledger_report" --data-dir "$clean_reset_data"); then fail "ledger report rejected the clean-reset fixture"; fi
-printf '%s\n' "$clean_output" | grep -Fq 'Bypass signatures after a denial: 0 (reset=0, consult=0)' || fail "ledger report flagged a reset that did not follow a denial"
+printf '%s\n' "$clean_output" | grep -Fq 'Bypass signatures after a denial (reset or marker-exempt reviewer consult): 0 (reset=0, reviewer-consult=0)' || fail "ledger report flagged a reset that did not follow a denial"
 printf '%s\n' "$clean_output" | grep -Fq 'does not show any budget warning condition' || fail "ledger report warned on a clean ledger"
+
+bypass_interleaved_data=$tmp_dir/bypass-interleaved
+mkdir "$bypass_interleaved_data"
+printf '%s\n' \
+  '{"event":"review","session_id":"s","cycle":1}' \
+  '{"event":"review","session_id":"s","cycle":2}' \
+  '{"event":"review","session_id":"s","cycle":3}' \
+  '{"event":"denied","session_id":"s","cycle":4}' \
+  '{"event":"consult","session_id":"s","agent_type":"sol_advisor_sol_consultant","used":3}' \
+  '{"event":"denied","session_id":"s","cycle":4}' \
+  '{"event":"consult","session_id":"s","agent_type":"sol_advisor_sol_reviewer","used":3}' \
+  > "$bypass_interleaved_data/review-budget.jsonl"
+if ! bypass_interleaved_output=$(sh "$ledger_report" --data-dir "$bypass_interleaved_data"); then fail "ledger report rejected the interleaved bypass fixture"; fi
+printf '%s\n' "$bypass_interleaved_output" | grep -Fq 'Consult records: 2 (consultant=1, marker-exempt reviewer=1, legacy without agent_type=0, unknown agent_type=0)' || fail "ledger report did not distinguish routine consultant and reviewer consults"
+printf '%s\n' "$bypass_interleaved_output" | grep -Fq 'Bypass signatures after a denial (reset or marker-exempt reviewer consult): 1 (reset=0, reviewer-consult=1)' || fail "ledger report counted a routine consultant as a bypass"
+pass "only marker-exempt reviewer consults after denial are bypass signatures"
+
+legacy_ledger_data=$tmp_dir/legacy-ledger
+mkdir "$legacy_ledger_data"
+printf '%s\n' \
+  '{"event":"review","session_id":"legacy","cycle":1}' \
+  '{"event":"denied","session_id":"legacy","cycle":4}' \
+  '{"event":"consult","session_id":"legacy","used":3}' \
+  '{"event":' \
+  > "$legacy_ledger_data/review-budget.jsonl"
+if ! legacy_ledger_output=$(sh "$ledger_report" --data-dir "$legacy_ledger_data"); then fail "ledger report rejected the legacy or truncated ledger fixture"; fi
+printf '%s\n' "$legacy_ledger_output" | grep -Fq 'Legacy consult records without agent_type (not counted as bypass): 1' || fail "ledger report did not state how old consult records are treated"
+printf '%s\n' "$legacy_ledger_output" | grep -Fq 'Bypass signatures after a denial (reset or marker-exempt reviewer consult): 0 (reset=0, reviewer-consult=0)' || fail "ledger report miscounted an old-format consult as a bypass"
+pass "ledger report tolerates malformed lines and explicitly excludes old-format consults from bypasses"
 
 empty_ledger_data=$tmp_dir/empty-ledger
 mkdir "$empty_ledger_data"
@@ -567,7 +748,7 @@ expected = {
     },
     "sol-advisor-sol-reviewer.toml": {
         "name": "sol_advisor_sol_reviewer",
-        "model": "gpt-5.6-sol",
+        "model": "gpt-5.6-terra",
         "model_reasoning_effort": "high",
         "sandbox_mode": "read-only",
     },
@@ -575,6 +756,12 @@ expected = {
         "name": "sol_advisor_luna_committer",
         "model": "gpt-5.6-luna",
         "model_reasoning_effort": "medium",
+    },
+    "sol-advisor-sol-consultant.toml": {
+        "name": "sol_advisor_sol_consultant",
+        "model": "gpt-5.6-sol",
+        "model_reasoning_effort": "medium",
+        "sandbox_mode": "read-only",
     },
 }
 actual = {path.name for path in root.glob("*.toml")}
@@ -588,9 +775,9 @@ for filename, pins in expected.items():
     for field, value in pins.items():
         if data.get(field) != value:
             raise SystemExit(f"{filename}: {field}={data.get(field)!r}, expected {value!r}")
-print("three exact role pins are valid")
+print("four exact role pins are valid")
 PY
-pass "exact three-role TOML inventory"
+pass "exact four-role TOML inventory"
 
 grep -Fq 'Scarcity here is ordered' "$skill" || fail "skill is missing ordered scarcity"
 grep -Fq 'Codex tokens. The abundant resource.' "$skill" || fail "skill is missing abundant Codex token doctrine"
@@ -605,19 +792,20 @@ pass "ordered scarcity, scope discipline, and bounded reviewer contract"
 
 grep -Fq "legacy_terra_sha256=$legacy_terra_sha256" "$installer" || fail "installer legacy Terra digest mismatch"
 grep -Fq "legacy_luna_sha256=$legacy_luna_sha256" "$installer" || fail "installer legacy Luna digest mismatch"
-grep -Fq "prev_sol_sha256=$prev_sol_sha256" "$installer" || fail "installer previous Sol digest mismatch"
+grep -Fq "prev_sol_sha256='$prev_sol_sha256'" "$installer" || fail "installer previous Sol digest set mismatch"
 pass "immutable v0.2.0 migration fingerprints"
-grep -Fq "legacy_consultant_file=$legacy_consultant_file" "$installer" || fail "installer legacy consultant filename mismatch"
-grep -Fq "legacy_consultant_sha256=$legacy_consultant_sha256" "$installer" || fail "installer legacy consultant digest mismatch"
-pass "retired Sol consultant migration fingerprint"
+grep -Fq "consultant_file=$consultant_file" "$installer" || fail "installer current consultant filename mismatch"
+grep -Fq 'consultant_template=$template_dir/$consultant_file' "$installer" || fail "installer is missing the current consultant template path"
+grep -Fq 'consultant_destination=$target_dir/$consultant_file' "$installer" || fail "installer is missing the current consultant destination path"
+pass "current Sol consultant template constants"
 
 clean_target=$tmp_dir/clean
 sh "$installer" --target-dir "$clean_target"
 cmp -s "$templates/sol-advisor-luna-implementer.toml" "$clean_target/sol-advisor-luna-implementer.toml" || fail "clean Implementer install mismatch"
 cmp -s "$templates/$sol_file" "$clean_target/$sol_file" || fail "clean Sol install mismatch"
+cmp -s "$templates/$consultant_file" "$clean_target/$consultant_file" || fail "clean Sol consultant install mismatch"
 cmp -s "$templates/$floor_file" "$clean_target/$floor_file" || fail "clean floor-lane install mismatch"
 test ! -e "$clean_target/$terra_file" || fail "clean install created retired Terra role"
-test ! -e "$clean_target/$legacy_consultant_file" || fail "clean install created retired Sol consultant role"
 sh "$installer" --target-dir "$clean_target" --check
 before=$(snapshot_files "$clean_target")
 sh "$installer" --target-dir "$clean_target"
@@ -634,24 +822,39 @@ codex_home=$tmp_dir/codex-home
 CODEX_HOME="$codex_home" sh "$installer"
 cmp -s "$templates/sol-advisor-luna-implementer.toml" "$codex_home/agents/sol-advisor-luna-implementer.toml" || fail "CODEX_HOME Implementer mismatch"
 cmp -s "$templates/$sol_file" "$codex_home/agents/$sol_file" || fail "CODEX_HOME Sol mismatch"
+cmp -s "$templates/$consultant_file" "$codex_home/agents/$consultant_file" || fail "CODEX_HOME Sol consultant mismatch"
 cmp -s "$templates/$floor_file" "$codex_home/agents/$floor_file" || fail "CODEX_HOME floor-lane mismatch"
 test ! -e "$codex_home/config.toml" || fail "installer created config.toml"
-test ! -e "$codex_home/agents/$legacy_consultant_file" || fail "CODEX_HOME install created retired Sol consultant role"
 relative_parent=$tmp_dir/relative-parent
 mkdir "$relative_parent"
 (cd "$relative_parent" && sh "$installer" --target-dir relative-agents)
 cmp -s "$templates/sol-advisor-luna-implementer.toml" "$relative_parent/relative-agents/sol-advisor-luna-implementer.toml" || fail "relative target Implementer mismatch"
 pass "CODEX_HOME and relative target behavior"
 
-consultant_target=$tmp_dir/consultant-removal
+consultant_target=$tmp_dir/consultant-round-trip
 sh "$installer" --target-dir "$consultant_target"
-write_legacy_consultant "$consultant_target"
-if sh "$installer" --target-dir "$consultant_target" --check; then fail "--check accepted retired Sol consultant"; fi
-test -e "$consultant_target/$legacy_consultant_file" || fail "consultant check refusal removed the retired file"
-sh "$installer" --target-dir "$consultant_target"
-test ! -e "$consultant_target/$legacy_consultant_file" || fail "installer did not remove exact legacy Sol consultant"
+cmp -s "$templates/$consultant_file" "$consultant_target/$consultant_file" || fail "clean install did not create the current Sol consultant"
 sh "$installer" --target-dir "$consultant_target" --check
-pass "retired Sol consultant check refusal and exact removal"
+install_output=$(sh "$installer" --target-dir "$consultant_target")
+printf '%s\n' "$install_output" | grep -Fq "ALREADY CURRENT: $consultant_target/$consultant_file" || fail "byte-identical Sol consultant was not reported ALREADY CURRENT"
+
+rm "$consultant_target/$consultant_file"
+if sh "$installer" --target-dir "$consultant_target" --check; then fail "--check accepted a target missing only the Sol consultant"; fi
+test ! -e "$consultant_target/$consultant_file" || fail "--check created the missing Sol consultant file"
+sh "$installer" --target-dir "$consultant_target"
+cmp -s "$templates/$consultant_file" "$consultant_target/$consultant_file" || fail "missing Sol consultant was not reinstalled"
+sh "$installer" --target-dir "$consultant_target" --check
+
+printf '%s\n' modified >> "$consultant_target/$consultant_file"
+before=$(snapshot_files "$consultant_target")
+if sh "$installer" --target-dir "$consultant_target"; then fail "installer replaced a modified Sol consultant"; fi
+after=$(snapshot_files "$consultant_target")
+[ "$before" = "$after" ] || fail "modified Sol consultant refusal partially mutated target"
+test -e "$consultant_target/$consultant_file" || fail "modified Sol consultant refusal removed the file"
+if sh "$installer" --target-dir "$consultant_target" --check; then fail "--check accepted a modified Sol consultant"; fi
+after=$(snapshot_files "$consultant_target")
+[ "$before" = "$after" ] || fail "--check mutated a modified Sol consultant target"
+pass "Sol consultant current-template round trip: install, ALREADY CURRENT, missing-then-reinstalled, and modified refusal"
 
 migration_target=$tmp_dir/migration
 write_legacy_roles "$migration_target"
@@ -662,29 +865,25 @@ test ! -e "$migration_target/$terra_file" || fail "exact legacy Terra was not re
 sh "$installer" --target-dir "$migration_target" --check
 pass "migration to Luna/Max implementer with v0.2.0 legacy cleanup"
 
-prev_sol_target=$tmp_dir/previous-sol-migration
-sh "$installer" --target-dir "$prev_sol_target"
-if ! command -v git >/dev/null 2>&1; then
-  printf '%s\n' "SKIP: predecessor Sol migration requires git"
-else
-  prev_sol_fixture=$tmp_dir/previous-sol-reviewer.toml
-  if ! git -C "$repo_dir" show HEAD:plugins/sol-advisor/agents/sol-advisor-sol-reviewer.toml > "$prev_sol_fixture"; then
-    printf '%s\n' "SKIP: predecessor Sol migration could not read the template from git"
-  else
-    cp "$prev_sol_fixture" "$prev_sol_target/$sol_file"
-    prev_sol_digest=$(shasum -a 256 "$prev_sol_target/$sol_file" | awk '{print $1}')
-    current_sol_digest=$(shasum -a 256 "$templates/$sol_file" | awk '{print $1}')
-    if [ "$prev_sol_digest" = "$current_sol_digest" ]; then
-      printf '%s\n' "SKIP: predecessor Sol template is byte-identical to the current template"
-    else
-      [ "$prev_sol_digest" = "$prev_sol_sha256" ] || fail "predecessor Sol fixture digest mismatch"
-      sh "$installer" --target-dir "$prev_sol_target"
-      cmp -s "$templates/$sol_file" "$prev_sol_target/$sol_file" || fail "previous Sol reviewer was not migrated"
-      sh "$installer" --target-dir "$prev_sol_target" --check
-      pass "previous shipped Sol reviewer migration"
-    fi
-  fi
-fi
+for previous_sol_fixture in operator 2e8acff 369073b; do
+  prev_sol_target=$tmp_dir/previous-sol-migration-$previous_sol_fixture
+  sh "$installer" --target-dir "$prev_sol_target"
+  write_previous_sol_reviewer "$prev_sol_target" "$previous_sol_fixture"
+  sh "$installer" --target-dir "$prev_sol_target"
+  cmp -s "$templates/$sol_file" "$prev_sol_target/$sol_file" || fail "previous Sol reviewer was not migrated: $previous_sol_fixture"
+  sh "$installer" --target-dir "$prev_sol_target" --check
+done
+pass "previous shipped Sol reviewer migration"
+pass "all three accepted predecessor Sol reviewer digests migrate to the current template"
+
+unrecognized_sol_target=$tmp_dir/unrecognized-sol-predecessor
+sh "$installer" --target-dir "$unrecognized_sol_target"
+printf '%s\n' 'not a recognized Sol reviewer predecessor' > "$unrecognized_sol_target/$sol_file"
+before=$(snapshot_files "$unrecognized_sol_target")
+if sh "$installer" --target-dir "$unrecognized_sol_target"; then fail "installer accepted an unrecognized Sol reviewer predecessor"; fi
+after=$(snapshot_files "$unrecognized_sol_target")
+[ "$before" = "$after" ] || fail "unrecognized Sol reviewer refusal partially mutated target"
+pass "unrecognized Sol reviewer predecessor refusal with zero partial mutation"
 
 modified_terra=$tmp_dir/modified-terra
 write_legacy_roles "$modified_terra"
@@ -694,17 +893,6 @@ if sh "$installer" --target-dir "$modified_terra"; then fail "installer replaced
 after=$(snapshot_files "$modified_terra")
 [ "$before" = "$after" ] || fail "modified-Terra refusal partially mutated target"
 pass "modified Terra refusal with zero partial mutation"
-
-modified_consultant=$tmp_dir/modified-consultant
-sh "$installer" --target-dir "$modified_consultant"
-write_legacy_consultant "$modified_consultant"
-printf '%s\n' modified >> "$modified_consultant/$legacy_consultant_file"
-before=$(snapshot_files "$modified_consultant")
-if sh "$installer" --target-dir "$modified_consultant"; then fail "installer removed modified Sol consultant"; fi
-after=$(snapshot_files "$modified_consultant")
-[ "$before" = "$after" ] || fail "modified-consultant refusal partially mutated target"
-test -e "$modified_consultant/$legacy_consultant_file" || fail "modified-consultant refusal removed the file"
-pass "modified Sol consultant refusal with zero partial mutation"
 
 stale_terra=$tmp_dir/stale-terra
 sh "$installer" --target-dir "$stale_terra"
@@ -716,16 +904,6 @@ if sh "$installer" --target-dir "$stale_terra" --check; then fail "--check accep
 after=$(snapshot_files "$stale_terra")
 [ "$before" = "$after" ] || fail "stale-Terra check mutated target"
 pass "stale Terra check refusal is non-mutating"
-
-stale_consultant=$tmp_dir/stale-consultant
-sh "$installer" --target-dir "$stale_consultant"
-write_legacy_consultant "$stale_consultant"
-before=$(snapshot_files "$stale_consultant")
-if sh "$installer" --target-dir "$stale_consultant" --check; then fail "--check accepted stale Sol consultant"; fi
-after=$(snapshot_files "$stale_consultant")
-[ "$before" = "$after" ] || fail "stale-consultant check mutated target"
-test -e "$stale_consultant/$legacy_consultant_file" || fail "stale-consultant check removed the file"
-pass "stale Sol consultant check refusal is non-mutating"
 
 unsafe=$tmp_dir/unsafe
 mkdir "$unsafe"
@@ -800,4 +978,4 @@ sh -n "$challenge"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 
-printf '%s\n' "VERIFY PASSED: Sol Advisor three-role migration checks completed in $tmp_dir"
+printf '%s\n' "VERIFY PASSED: Sol Advisor four-role migration checks completed in $tmp_dir"

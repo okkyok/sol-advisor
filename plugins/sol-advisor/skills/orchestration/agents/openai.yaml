@@ -1,4 +1,4 @@
 interface:
   display_name: "Sol Advisor Orchestration"
-  short_description: "Route judgment to Luna / Max and mechanical edits to Luna / Medium; verify evidence, then budget fresh Sol review"
-  default_prompt: "Use $orchestration to preflight three companion roles; classify work for Luna / Max judgment or the Luna / Medium floor lane, verify evidence in the primary session, and obtain a fresh Sol verdict within the review budget."
+  short_description: "Route judgment to Luna / Max and mechanical edits to Luna / Medium; verify evidence, then budget a fresh Terra review"
+  default_prompt: "Use $orchestration to preflight four companion roles; classify work for Luna / Max judgment or the Luna / Medium floor lane, verify evidence in the primary session, and obtain a fresh Terra verdict within the review budget."
