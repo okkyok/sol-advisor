@@ -1,7 +1,7 @@
 {
-  "name": "sol-advisor",
+  "name": "advisor-marketplace",
   "interface": {
-    "displayName": "Sol Advisor"
+    "displayName": "Advisor Plugins"
   },
   "plugins": [
     {
@@ -9,6 +9,18 @@
       "source": {
         "source": "local",
         "path": "./plugins/sol-advisor"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "astra-advisor",
+      "source": {
+        "source": "local",
+        "path": "./plugins/astra-advisor"
       },
       "policy": {
         "installation": "AVAILABLE",
