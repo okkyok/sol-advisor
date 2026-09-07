@@ -1,0 +1,24 @@
+{
+  "name": "astra-advisor",
+  "version": "1.0.0",
+  "description": "Lean, cost-aware Codex orchestration for GPT-6 Astra with dynamic bounded subagents.",
+  "author": {"name": "okkyok", "url": "https://github.com/okkyok"},
+  "homepage": "https://github.com/okkyok/sol-advisor#readme",
+  "repository": "https://github.com/okkyok/sol-advisor",
+  "license": "MIT",
+  "keywords": ["codex", "orchestration", "multi-agent", "gpt-6-astra", "token-efficiency"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Astra Advisor",
+    "shortDescription": "Keep Astra focused on judgment; route bounded work to cheaper subagents when useful.",
+    "longDescription": "A lean personal orchestration layer for GPT-6 Astra. Astra owns intent, architecture, integration, verification, and acceptance while dynamically delegating bounded independent work to supported Luna, Terra, or Sol subagents only when it improves time, quality, or token efficiency. It avoids full-history forks, tight polling, recursive delegation, mandatory review loops, and unnecessary testing.",
+    "developerName": "okkyok",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://github.com/okkyok/sol-advisor",
+    "defaultPrompt": [
+      "Use $astra-advisor:orchestration to complete this work with lean, cost-aware delegation.",
+      "Keep Astra on judgment and integration; delegate only bounded work where it clearly helps."
+    ]
+  }
+}
