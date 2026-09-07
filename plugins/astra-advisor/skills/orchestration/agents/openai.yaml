@@ -1,0 +1,4 @@
+interface:
+  display_name: "Astra Advisor"
+  short_description: "Lean, cost-aware orchestration for GPT-6 Astra"
+  default_prompt: "Use $astra-advisor:orchestration to complete this work with minimal process overhead and bounded subagent delegation only when it clearly helps."
