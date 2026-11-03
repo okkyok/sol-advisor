@@ -197,11 +197,11 @@ for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.
 done
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.9.0 ] || fail "manifest version is not 0.9.0"
+[ "$(jq -r '.version' "$manifest")" = 0.9.1 ] || fail "manifest version is not 0.9.1"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
-grep -Fq '"plugin_version": "0.9.0"' "$review_hook" || fail "review-budget.py plugin_version constant does not match manifest 0.9.0"
-pass "manifest, verify assertion, and hook constant agree on 0.9.0"
+grep -Fq '"plugin_version": "0.9.1"' "$review_hook" || fail "review-budget.py plugin_version constant does not match manifest 0.9.1"
+pass "manifest, verify assertion, and hook constant agree on 0.9.1"
 
 jq empty "$hooks_file"
 jq -e '
@@ -686,7 +686,7 @@ expected={
 "sol-advisor-luna-deep.toml":("sol_advisor_luna_deep","gpt-6-luna","max",None),
 "sol-advisor-sol-worker.toml":("sol_advisor_sol_worker","gpt-6.1-sol","medium",None),
 "sol-advisor-sol-reviewer.toml":("sol_advisor_sol_reviewer","gpt-6.1-sol","medium","read-only"),
-"sol-advisor-astra-consultant.toml":("sol_advisor_astra_consultant","gpt-6-astra","high","read-only"),}
+"sol-advisor-astra-consultant.toml":("sol_advisor_astra_consultant","gpt-6-astra","medium","read-only"),}
 if {p.name for p in root.glob("*.toml")} != set(expected): raise SystemExit("template inventory differs")
 for fn,(name,model,effort,sandbox) in expected.items():
  d=tomllib.loads((root/fn).read_text())
@@ -915,4 +915,4 @@ sh -n "$ledger_report"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 
-printf '%s\n' "VERIFY PASSED: Sol Advisor 0.9.0 documentation and runtime checks completed in $tmp_dir"
+printf '%s\n' "VERIFY PASSED: Sol Advisor 0.9.1 documentation and runtime checks completed in $tmp_dir"

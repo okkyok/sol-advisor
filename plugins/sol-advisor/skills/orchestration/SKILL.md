@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: "Codex-native orchestration on gpt-6 lanes: primary gpt-6.1-sol medium architect; gpt-6-luna low committer for mechanical edits; gpt-6-luna high default implementer; gpt-6-luna max narrow retry; gpt-6.1-sol medium broad worker and read-only reviewer; gpt-6-astra high read-only frontier consultant. Classify, specify, route, verify, and review in proportion to risk."
+description: "Codex-native orchestration on gpt-6 lanes: primary gpt-6.1-sol medium architect; gpt-6-luna low committer for mechanical edits; gpt-6-luna high default implementer; gpt-6-luna max narrow retry; gpt-6.1-sol medium broad worker and read-only reviewer; gpt-6-astra medium read-only frontier consultant. Classify, specify, route, verify, and review in proportion to risk."
 ---
 
 # Sol Advisor Orchestration

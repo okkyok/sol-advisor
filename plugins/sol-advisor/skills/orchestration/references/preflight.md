@@ -16,7 +16,7 @@ fresh Codex task so native discovery sees current profiles.
 | `sol_advisor_luna_deep` | `gpt-6-luna` / max | Qualifying narrow retry |
 | `sol_advisor_sol_worker` | `gpt-6.1-sol` / medium | Broad work and senior escalation |
 | `sol_advisor_sol_reviewer` | `gpt-6.1-sol` / medium, read-only | High-risk review |
-| `sol_advisor_astra_consultant` | `gpt-6-astra` / high, read-only | Frontier consult |
+| `sol_advisor_astra_consultant` | `gpt-6-astra` / medium, read-only | Frontier consult |
 
 ## Checks
 

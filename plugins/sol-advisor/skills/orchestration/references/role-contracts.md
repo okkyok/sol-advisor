@@ -150,7 +150,7 @@ agent_type: sol_advisor_astra_consultant
 fork_turns: none
 ~~~
 
-Pinned `gpt-6-astra` / high, read-only. The packet starts with `COMMITMENT BOUNDARY` (an audit marker; the hook
+Pinned `gpt-6-astra` / medium, read-only. The packet starts with `COMMITMENT BOUNDARY` (an audit marker; the hook
 identifies the consult by agent type) and
 contains the decisive question, current approach, evidence, and what failed. Require:
 

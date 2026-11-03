@@ -1,6 +1,6 @@
 {
   "name": "sol-advisor",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Codex-native workflow with six GPT-6 lanes: Luna floor and implementation, Luna narrow retry, Sol broad implementation and review, and read-only Astra consultation.",
   "author": {"name": "Daniel McAteer", "url": "https://github.com/DannyMac180"},
   "homepage": "https://github.com/okkyok/sol-advisor#readme",
@@ -12,7 +12,7 @@
   "interface": {
     "displayName": "Sol Advisor",
     "shortDescription": "Route mechanical, standard, retry, broad integration, review, and premise-reframing work to the six GPT-6 role lanes.",
-    "longDescription": "Sol Advisor provides six purpose-built GPT-6 lanes: Luna / low for mechanical edits, Luna / high for ordinary implementation, Luna / max for narrow retries, Sol / medium for broad integration and senior escalations, read-only Sol / medium for budgeted final review, and read-only Astra / high for reframing premises and high-consequence decisions.",
+    "longDescription": "Sol Advisor provides six purpose-built GPT-6 lanes: Luna / low for mechanical edits, Luna / high for ordinary implementation, Luna / max for narrow retries, Sol / medium for broad integration and senior escalations, read-only Sol / medium for budgeted final review, and read-only Astra / medium for reframing premises and high-consequence decisions.",
     "developerName": "Daniel McAteer",
     "category": "Productivity",
     "capabilities": ["Interactive", "Write"],

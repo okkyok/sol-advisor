@@ -1,7 +1,7 @@
 name = "sol_advisor_astra_consultant"
 description = "Sol Advisor's read-only frontier advisor for reframing stuck or high-consequence decisions."
 model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
 developer_instructions = """

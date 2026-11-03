@@ -17,7 +17,7 @@ and risk-proportional review.
 | Deep retry | `sol_advisor_luna_deep` | `gpt-6-luna` / max | One qualifying narrow retry |
 | Sol worker | `sol_advisor_sol_worker` | `gpt-6.1-sol` / medium | Broad work and senior escalation |
 | Sol reviewer | `sol_advisor_sol_reviewer` | `gpt-6.1-sol` / medium, read-only | High-risk review |
-| Astra consultant | `sol_advisor_astra_consultant` | `gpt-6-astra` / high, read-only | Stuck or expensive-to-reverse decisions |
+| Astra consultant | `sol_advisor_astra_consultant` | `gpt-6-astra` / medium, read-only | Stuck or expensive-to-reverse decisions |
 
 ## Install
 
@@ -144,6 +144,11 @@ The README and skill keep the same ledger path.
 After ten to twenty deliverables, run `scripts/ledger-report.sh` and review cap hits,
 resets, consults, and routing outcomes. Use the routing ledger to compare the measured
 spawn floor and completed-delegation time with actual local experience.
+
+## 0.9.1
+
+The Astra consultant runs at medium reasoning instead of high. The installer replaces an
+unmodified 0.9.0 Astra file automatically.
 
 ## 0.9.0
 
