@@ -34,7 +34,7 @@ def main():
                 .isoformat()
                 .replace("+00:00", "Z"),
                 "session_id": payload.get("session_id"),
-                "plugin_version": "0.8.0",
+                "plugin_version": "0.9.0",
             }
             tool_input_text = json.dumps(
                 payload.get("tool_input"), separators=(",", ":"), ensure_ascii=False
@@ -59,13 +59,13 @@ def main():
         if not isinstance(tool_input, dict):
             return
         agent_type = tool_input.get("agent_type")
-        if agent_type not in ("sol_advisor_sol_reviewer", "sol_advisor_sol_consultant"):
+        if agent_type not in ("sol_advisor_sol_reviewer", "sol_advisor_astra_consultant", "sol_advisor_sol_consultant"):
             return
 
         # Final reviewer spawns are budgeted unless they carry the explicit
-        # commitment-boundary marker. The distinct Sol / Medium consultant records
+        # commitment-boundary marker. The distinct Astra consultant records
         # an auditable consultation and never consumes a review cycle.
-        is_consultant = agent_type == "sol_advisor_sol_consultant"
+        is_consultant = agent_type in ("sol_advisor_astra_consultant", "sol_advisor_sol_consultant")
         message = tool_input.get("message", "")
         exempt = isinstance(message, str) and "COMMITMENT BOUNDARY" in message
 

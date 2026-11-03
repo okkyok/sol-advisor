@@ -84,7 +84,7 @@ for record in records:
     if event == "consult":
         consult_count += 1
         agent_type = record.get("agent_type")
-        if agent_type == "sol_advisor_sol_consultant":
+        if agent_type in ("sol_advisor_astra_consultant", "sol_advisor_sol_consultant"):
             consultant_consult_count += 1
         elif agent_type == "sol_advisor_sol_reviewer":
             reviewer_consult_count += 1

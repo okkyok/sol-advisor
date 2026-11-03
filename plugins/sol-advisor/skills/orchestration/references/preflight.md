@@ -1,99 +1,60 @@
 # Preflight the companion custom agents
 
-Complete this preflight before the first delegation in a session and before accepting
-any lane's result. These are the same checks [SKILL.md](../SKILL.md) points to;
-nothing here supersedes it.
+Complete this before the first delegation, and before accepting any lane's result.
+These checks are the same ones [SKILL.md](../SKILL.md) requires.
 
-The four role files are user-owned native custom-agent TOML files. Installing or
-updating the plugin does not automatically register them. Install them separately and
-start a fresh Codex task so native discovery sees the current profiles.
+The six role files are user-owned native custom-agent TOML files. Installing or updating
+the plugin does not automatically register them. Install them separately and start a
+fresh Codex task so native discovery sees current profiles.
 
-Complete step 1 once per session. Before every delegation, complete steps 2-3. After
-spawning a lane, complete steps 4-5 before accepting its result:
+## Required roles and pins
 
-1. Verify that hook enforcement is live before relying on it, by running:
+| `agent_type` | Pinned model / effort | Use |
+|---|---|---|
+| `sol_advisor_luna_committer` | `gpt-6-luna` / low | Mechanical, fully determined edits |
+| `sol_advisor_luna_implementer` | `gpt-6-luna` / high | Default ordinary well-specified work |
+| `sol_advisor_luna_deep` | `gpt-6-luna` / max | Qualifying narrow retry |
+| `sol_advisor_sol_worker` | `gpt-6.1-sol` / medium | Broad work and senior escalation |
+| `sol_advisor_sol_reviewer` | `gpt-6.1-sol` / medium, read-only | High-risk review |
+| `sol_advisor_astra_consultant` | `gpt-6-astra` / high, read-only | Frontier consult |
+
+## Checks
+
+1. Complete steps 1-2 once per session. Before every delegation, repeat steps 2-3.
+   After spawning, complete steps 4-5 before accepting its result.
+2. Verify hook enforcement with a fresh literal nonce:
 
    ~~~sh
    references_dir=<directory-containing-this-file>
-   checker="$references_dir/../../../scripts/check-hook-trust.sh"
+   checker="$references_dir/../../scripts/check-hook-trust.sh"
    sh "$checker" --nonce liveness-CHANGEME
    ~~~
 
-   Replace `CHANGEME` with a token you type fresh for this check and do not reuse.
-   Copying the example verbatim lets a concurrent session using the same token
-   satisfy your check, which is the failure this nonce exists to prevent.
-
-   The nonce proves that the heartbeat belongs to this invocation. Running the
-   checker without a nonce leaves a concurrent trusted session able to produce a
-   false `HOOK ACTIVE` result.
-
-   The hook reads the command text before the shell expands it, so a token produced
-   by `$$`, `$(date ...)`, backticks, or a variable is invisible to the hook and
-   guarantees a false `HOOK INERT`. The token must be a literal made of
-   `[A-Za-z0-9_.:-]`, 4 to 64 characters, chosen fresh each time so a stale heartbeat
-   cannot satisfy it.
-
-   `HOOK ACTIVE` means the review budget is enforced by the host; confirm the printed
-   session id matches the current session. `HOOK INERT` does not stop the lane -- the
-   workflow still runs -- but the architect must say so plainly in its final report:
-   the review budget was not machine-enforced during this deliverable, and the loop was
-   bounded only by the architect's own discipline. Never claim an enforced budget
-   without a fresh `HOOK ACTIVE`. The checker prints the data directory it resolved;
-   `review-budget.jsonl` lives in that same directory, so read the ledger from the
-   printed path rather than from an unavailable `$PLUGIN_DATA` value.
-
-2. Resolve `../../../scripts/install-agents.sh` relative to this file and run its
+   Replace `CHANGEME` with a fresh 4-64 character `[A-Za-z0-9_.:-]` token. A literal
+   nonce proves the heartbeat belongs to this invocation. `HOOK ACTIVE` means the host
+   enforces the review budget; `HOOK INERT` means the loop is not machine-enforced and
+   must be reported. Read the ledger from the printed data directory.
+3. Resolve `../../scripts/install-agents.sh` relative to this file and run its
    non-mutating exactness check:
 
    ~~~sh
    references_dir=<directory-containing-this-file>
-   installer="$references_dir/../../../scripts/install-agents.sh"
+   installer="$references_dir/../../scripts/install-agents.sh"
    sh "$installer" --check
    ~~~
 
-   It must exit zero. This proves the four current role files match the shipped
-   templates exactly and the retired companion file for `sol_advisor_terra_implementer`
-   is absent. If the
-   check reports a missing, stale, unsafe, or conflicting file, stop the affected
-   lane. Give the user the installer path and reported destination. Never work
-   around failure with another agent, model, or effort.
+   It must exit zero and prove all six files match current templates with no retired
+   companion file. Stop the affected lane on a missing, stale, unsafe, or conflicting
+   file; report installer path and destination.
+4. Inspect native exposure of all six exact `agent_type` names. Use public native spawn/details metadata first. It must identify the selected role. Compare exposed
+   model and effort with the table. If either is omitted and the local rollout is
+   accessible, resolve `../../scripts/inspect-agent-runtime.sh` relative to this file
+   and run it with the native thread id. Public and local values must agree. Stop on
+   missing, inconsistent, unavailable, or unobservable routing.
+5. For the reviewer and consultant, capture actual sandbox policy and permission
+   profile types. Both request read-only. Call isolation enforced only when the observed
+   sandbox policy is `read-only`; stop if the required isolation is unobservable or a
+   mutation occurs.
 
-3. Inspect the native spawn tool's available `agent_type` entries. All four exact
-   names must be exposed:
-
-   - `sol_advisor_luna_implementer`
-   - `sol_advisor_sol_reviewer` (Terra / High final review)
-   - `sol_advisor_sol_consultant` (Sol / Medium commitment consultation)
-   - `sol_advisor_luna_committer`
-
-   If any is missing, tell the user to install/check the companion files, start a
-   fresh task, and update Codex if the name remains unavailable. Do not substitute a
-   built-in or similarly named role.
-
-4. Treat exact templates plus observed runtime routing as an acceptance gate.
-   Inspect public native spawn/details metadata first. It must identify the selected
-   custom role. When it exposes model or effort, compare them with the role pin.
-
-   If public details omit model or effort and the local rollout is accessible, resolve
-   `../../../scripts/inspect-agent-runtime.sh` relative to this file and run:
-
-   ~~~sh
-   references_dir=<directory-containing-this-file>
-   runtime_inspector="$references_dir/../../../scripts/inspect-agent-runtime.sh"
-   sh "$runtime_inspector" <native-subagent-thread-id>
-   ~~~
-
-   The helper's allowlisted output is the authoritative local fallback for omitted
-   model and effort. If public and local values both exist, they must agree. Accepted
-   values are Luna / max for judgment-bearing implementation, Luna / medium for
-   the floor lane, Terra / high for final review, and Sol / medium for commitment
-   consultation. Missing, inconsistent, unavailable, or
-   unobservable routing stops that lane.
-
-5. For every Terra review and Sol consultation, capture the observed sandbox policy type
-   and permission profile type. Both roles request read-only sandboxing, but the host may
-   broaden it. Never call the review OS-enforced read-only unless the observed sandbox
-   policy type is `read-only`.
-
-The custom-agent TOML, not the spawn call, pins model and effort. Never add per-spawn
-model or reasoning overrides.
+Never silently substitute a role, model, or effort, and never attach per-spawn model or
+reasoning overrides. The role files pin model and effort.

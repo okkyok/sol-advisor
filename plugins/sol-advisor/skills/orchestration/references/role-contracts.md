@@ -1,32 +1,20 @@
 # Native Codex role contracts
 
-Use these contracts with Sol Advisor's namespaced, role-pinned native custom agents.
-They do not launch a nested Codex CLI or change global default-subagent routing.
-Adapt every placeholder without removing a required field.
+Use these contracts with Sol Advisor's role-pinned native custom agents. They do not
+launch a nested Codex CLI or change global default-subagent routing. Adapt every
+placeholder without removing a required field.
 
 ## Required preflight
 
-Before every spawn, complete steps 1-2 of [preflight.md](preflight.md). After spawning,
-complete steps 3-4 before accepting the result:
-
-1. Require the non-mutating companion check to prove all four installed files exactly
-   match current templates and the retired companion file is absent.
-2. Require native exposure of exactly `sol_advisor_luna_implementer`,
-   `sol_advisor_sol_reviewer`, `sol_advisor_sol_consultant`, and
-   `sol_advisor_luna_committer`.
-3. Observe the selected role, model, and effort through public spawn/details metadata
-   first, using the local runtime inspector only for omitted fields. Accept only
-   Luna / Max for judgment-bearing implementation, Luna / Medium for the floor
-   lane, Terra / High for final review, and Sol / Medium for commitment consultation.
-4. For the reviewer and consultant, capture actual sandbox policy and permission profile types.
-
-A missing, stale, unsafe, conflicting, unavailable, inconsistent, or unobservable
-role/model/effort stops the lane. Never silently fall back. Model and effort are pinned
-by custom-agent TOML, so omit per-spawn overrides.
+Before each spawn, check exact installed files and exposed role names. Inspect public
+native spawn/details metadata first; use the local runtime inspector only for omitted
+fields. Confirm the selected role, model, and effort match its pin. For reviewer and
+consultant roles, capture sandbox policy and permission profile types. Stop on missing,
+stale, unsafe, conflicting, unavailable, inconsistent, or unobservable routing.
 
 ## Shared implementation contract
 
-Every Luna implementation prompt must contain all five sections:
+Every implementation prompt must contain all five sections:
 
 ~~~text
 OBJECTIVE
@@ -64,254 +52,113 @@ JUDGMENT CALLS: <decisions the specification left open, or none>
 GAPS: <unfinished work, ambiguity, or none>
 ~~~
 
-The primary session must inspect the diff and rerun verification itself.
+The primary session inspects the diff and reruns verification.
 
-## Luna / Max - implementation lane for judgment-bearing work
+## Luna committer — mechanical edits
 
-Use this lane for every delegated implementation, from routine edits through complex,
-security-sensitive, context-heavy, and broad work.
-
-Spawn exactly:
-
-~~~text
-agent_type: sol_advisor_luna_implementer
-fork_turns: none
-~~~
-
-The installed role pins GPT-5.6 Luna at max reasoning. Do not attach per-spawn model
-or reasoning fields. Require public-details-first runtime observation of the exact
-role and pin before accepting its report.
-
-Prompt:
-
-~~~text
-ROLE
-Act as Sol Advisor's sole implementation worker. Resolve the supplied specification
-within the settled architecture, preserve every stated interface and constraint, and
-surface ambiguity instead of redesigning the architecture.
-
-<paste and complete the Shared implementation contract>
-~~~
-
-## Luna / Medium - floor lane for mechanical edits
-
-Use this lane for mechanical, fully-determined edits whose specification leaves
-nothing to decide.
-
-Spawn exactly:
+Use for mechanical, fully determined changes. A blocked return is a routing error; send
+the task to the implementer without counting a failure step.
 
 ~~~text
 agent_type: sol_advisor_luna_committer
 fork_turns: none
 ~~~
 
-The installed role pins GPT-5.6 Luna at medium reasoning. Do not attach per-spawn model
-or reasoning fields.
+Pinned `gpt-6-luna` / low. If the specification requires choosing between reasonable
+designs or underdetermines the result, return `STATUS: blocked` and the open question.
 
-Prompt:
+## Luna implementer — default
 
-~~~text
-ROLE
-Act as Sol Advisor's floor-lane implementation worker. Execute the supplied
-specification literally. If it requires choosing between reasonable designs, return
-`STATUS: blocked` with the open question instead of choosing one.
-
-<paste and complete the Shared implementation contract>
-~~~
-
-## Sol / Medium - commitment-boundary consultant
-
-For consequential architecture, migration, public API, or wide-refactor decisions,
-spawn exactly:
+Use for ordinary, well-specified implementation, exploration, or ingest.
 
 ~~~text
-agent_type: sol_advisor_sol_consultant
+agent_type: sol_advisor_luna_implementer
 fork_turns: none
 ~~~
 
-The installed role pins Sol / Medium and requests a read-only sandbox. Include the
-literal `COMMITMENT BOUNDARY` marker in the prompt. Require exactly `proceed`, `change`,
-or `stop`, plus the decisive reason and largest risk. This consultation is separate
-from the final-review budget.
+Pinned `gpt-6-luna` / high. Resolve the specification within settled architecture and
+surface ambiguity rather than redesigning it.
 
-## Fresh Terra - requested-read-only final reviewer
+## Luna deep — narrow retry
 
-After parent verification, spawn a new native thread exactly:
+Use only after one prior failure when the retry is at most 3 files, has runnable
+verification, and the failure was reasoning on a clear specification.
+
+~~~text
+agent_type: sol_advisor_luna_deep
+fork_turns: none
+~~~
+
+Pinned `gpt-6-luna` / max. Stay within the specified files and report blocked rather than
+widening scope.
+
+## Sol worker — broad work and senior escalation
+
+Use first for several interacting components, integration-heavy interfaces, and
+wide-search debugging; use also after two failures on one objective or when a local
+judgment cannot be pinned down in a specification.
+
+~~~text
+agent_type: sol_advisor_sol_worker
+fork_turns: none
+~~~
+
+Pinned `gpt-6.1-sol` / medium. Implement against the specification and report blocked if
+the specification itself is wrong.
+
+## Sol reviewer — senior read-only review
+
+Use for security, schema, public API, migration, concurrency, irreversible or wide-blast
+radius changes, or work that resisted two attempts.
 
 ~~~text
 agent_type: sol_advisor_sol_reviewer
 fork_turns: none
 ~~~
 
-The installed role pins GPT-5.6 Terra at high reasoning and requests a read-only sandbox.
-Do not attach per-spawn model or reasoning fields. Observe the actual role, pin,
-sandbox policy, and permission profile before accepting its verdict.
-
-Prompt:
+Pinned `gpt-6.1-sol` / medium, read-only. Packet:
 
 ~~~text
 ROLE
-Act as the fresh final reviewer. Remain strictly read-only: do not edit files, implement
-fixes, or broaden scope.
+Review the actual change set. Remain read-only; never implement.
 
-STATED GOAL
-<The user's requested outcome.>
+GOAL AND CONSTRAINTS
+<Goal and constraints.>
 
-ACCUMULATED CHANGE SET
-<Exact allowed files plus complete working-tree diff, or explicit base/head revisions.>
+DIFF AND VERIFICATION
+<Complete diff and exact verification result.>
 
-INTERFACES AND CONSTRAINTS
-- <Compatibility, repository rules, safety boundaries, and excluded scope.>
-
-VERIFICATION EVIDENCE
-- <command> -> <actual primary-session output evidence>
-- <artifact or diff inspection> -> <actual evidence>
-
-REVIEW CYCLE
-This is review <n> of at most 3 for this deliverable.
-<For cycle 2 or 3 only:> Cycle 1 already defined the complete finding set. Judge only
-(a) whether each open finding listed below is now resolved, and (b) regressions or new
-defects introduced by the fix diffs. Report anything else under DEFERRED. Do not reopen
-settled decisions, restate cycle-1 findings that are now resolved, or broaden scope.
-
-OPEN FINDINGS FROM THE PREVIOUS CYCLE
-- <finding> -> <fix applied> -> <evidence>
+SILENCE GAP
+<List paths the change should have touched but did not: callers, parallel implementations,
+adjacent config.>
 
 REVIEW
-Inspect the actual files and accumulated change set. Judge correctness, completeness,
-regressions, scope discipline, interface preservation, test adequacy, and material risk.
-Reserve `fix-first` for defects that block the stated goal or introduce material risk.
-Style preferences and improvements outside the stated goal are DEFERRED, not findings.
-
-Scope inflation is a defect, not a preference. A change set that delivers artifacts the
-stated objective did not ask for — unrequested options, unused abstraction,
-speculative hardening, configuration nobody requested — fails the objective the way a
-missing requirement does. The finding names the surplus artifact and the objective it
-does not serve. Judge this against the stated objective only, never against a preferred
-design: alternative implementations, naming, and structure stay DEFERRED.
-
-Stay under 300 words; the reader is another model mid-task. A sound change set gets
-one line: do not manufacture objections to justify having been consulted. Findings
-must be defects, not preferences; "Correct and complete for the stated goal" means the
-goal is met and nothing beyond it was delivered. When that holds, the verdict is ship
-even though a different implementation would have been possible.
-
-SOL REVIEW
-CYCLE: <n> of 3
-VERDICT: ship | fix-first | rethink
-REASON: <decisive evidence-based reason>
-FINDINGS: <in-scope blocking issues with precise file references, or none>
-DEFERRED: <out-of-scope observations that must not trigger another fix cycle, or none>
-RESIDUAL RISK: <most important remaining risk, or none>
+Cycle 1 already defined the complete finding set. Stay under 300 words. Scope inflation is a defect, not a preference. A change set that delivers artifacts the objective did not ask for fails the objective like a missing requirement. Judge correctness, completeness, regressions, scope, interfaces, and material risk. Return
+ship, fix-first, or rethink with evidence. If framing itself is in doubt, add a final line:
+ESCALATE: <one-sentence reason>
 ~~~
 
-The `REVIEW CYCLE` line tells the reviewer which cycle it is in; the budget no longer
-depends on it. The shipped hook counts every `sol_advisor_sol_reviewer` spawn. The separate
-`sol_advisor_sol_consultant` lane is not counted.
-The marker is mandatory for consultation packets; never put it in a final-review packet.
+## Astra consultant — frontier consult
 
-If any fix is made after review, discard the verdict and run a new fresh review inside
-the review budget. That budget is at most 3 final reviews per deliverable, tracked by the
-hook in `$PLUGIN_DATA/review-budget.jsonl` so it survives context compaction, and it is
-never reset by compaction, a corrected specification, an architecture revision, or a
-renegotiated scope. When the budget is exhausted, a finding survives two consecutive fix
-cycles, or `rethink` arrives at cycle 2 or later, stop the loop and hand the unresolved
-findings and options back to the user instead of spawning another lane. See SKILL.md's
-bounded-review-loop section for the full stop conditions.
-
-Terra reviewing Sol is context-clean and different-model within the same vendor; the
-Challenger is the cross-vendor check.
-
-Use observed isolation, not requested isolation:
-
-- With observed `read-only`, proceed with enforced isolation.
-- If the host broadens it, proceed only when hard isolation is not required, the
-  prompt forbids edits, and the parent captures and verifies exact before-and-after
-  repository and artifact state. Report the broader policy and profile.
-- If isolation is unobservable, hard isolation is required, or any mutation occurs,
-  stop the lane and do not hide or repair the mutation under that verdict.
-
-## Commitment-boundary Sol consult
-
-For pre-implementation review, spawn the dedicated Sol / Medium consultant with
-`fork_turns: none`.
-Give it the proposed decision, goal, constraints, relevant paths, alternatives, and the
-one question that changes the plan. Require `proceed`, `change`, or `stop`, plus the
-decisive reason and largest risk. Apply the same preflight, runtime-observation,
-sandbox-reporting, and no-fallback rules.
-
-Open the packet with the exemption marker, on its own line, so the consult does not
-consume final-review budget:
+Consult before the next implementation attempt for architectural deadlock or a failed Sol
+worker (a failure after its one corrected-spec retry, or a failed senior escalation), before
+the first attempt for an expensive-to-reverse decision, and once on a review stop
+condition before returning to the user.
 
 ~~~text
-COMMITMENT BOUNDARY
-This is a pre-implementation consult, not a final review of a completed change set.
+agent_type: sol_advisor_astra_consultant
+fork_turns: none
 ~~~
 
-The hook records the exempt spawn as a `consult` entry. Omitting the marker costs one
-review cycle; putting it in a final-review packet is a bypass, and a consult that
-immediately follows a denial is reported as one by `scripts/ledger-report.sh`.
-
-## Challenge packet
-
-The Challenger has no repository access. The packet must therefore be entirely
-self-contained: everything the architect wants judged, including the relevant change set,
-evidence, constraints, and unresolved findings, must be inside the packet text itself rather
-than referenced by path.
-
-Use exactly one of the following first lines, then pipe the packet to the external helper:
+Pinned `gpt-6-astra` / high, read-only. The packet starts with `COMMITMENT BOUNDARY` (an audit marker; the hook
+identifies the consult by agent type) and
+contains the decisive question, current approach, evidence, and what failed. Require:
 
 ~~~text
-TRIGGER: deadlock
-TRIGGER: irreversible
-TRIGGER: user-request
-~~~
-
-The normal invocation is `cat challenge-packet.txt | sh "$plugin_dir/scripts/challenge.sh"`;
-the helper also accepts `--packet challenge-packet.txt`. It invokes the external CLI in this
-shape, with the packet on stdin and no positional prompt argument:
-
-~~~sh
-claude -p --model opus --output-format json --strict-mcp-config \
-  --system-prompt ... \
-  --disallowedTools Write Edit NotebookEdit Bash
-~~~
-
-Treat a `CHALLENGER DEGRADED` stderr message as a reply that is not a verified Opus
-cross-model-family challenge, and repeat that message in the final report. Treat a
-`CHALLENGER UNAVAILABLE` stderr message and non-zero exit as no usable reply; do not invent a
-verdict.
-
-Compose the packet in this shape. For `deadlock`, state the unresolved findings and the fixes
-that failed to resolve them under `WHAT THE SOL REVIEWER SAID`:
-
-~~~text
-TRIGGER: deadlock | irreversible | user-request
-<one line: which stop condition fired, or what specifically is irreversible>
-
-DECISION OR CHANGE SET
-<the architecture decision, or the accumulated diff>
-
-STATED GOAL
-<the requested outcome>
-
-CONSTRAINTS
-<the interfaces, safety boundaries, and excluded scope>
-
-OPTIONS ALREADY CONSIDERED AND REJECTED
-<the alternatives and why they were rejected>
-
-WHAT THE SOL REVIEWER SAID
-<the review verdict and evidence; for deadlock, include unresolved findings and failed fixes>
-
-THE ONE QUESTION THAT CHANGES THE DECISION
-<the decisive open question>
-
-CHALLENGE
-VERDICT: agree | challenge | blocked-risk
-REASON: <the decisive reason>
+RECOMMENDATION: proceed | change | stop
 LARGEST RISK: <one>
+REFRAMED APPROACH: <required for change; otherwise none>
 ~~~
 
-The hook records the consultant spawn as a `consult` entry. The distinct consultant
-agent type does not consume a final-review cycle.
+A `change` recommendation becomes a new specification; a patched specification retains
+its failure count. Astra never implements. The consult is uncounted by the review budget.

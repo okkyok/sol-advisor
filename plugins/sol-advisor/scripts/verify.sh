@@ -1,5 +1,5 @@
 #!/bin/sh
-# Repository-local verification for Sol Advisor's four-role companion migration.
+# Repository-local verification for Sol Advisor's six-role migration.
 
 set -eu
 
@@ -17,7 +17,6 @@ hooks_file=$plugin_dir/hooks.json
 review_hook=$plugin_dir/hooks/review-budget.py
 data_dir_resolver=$script_dir/resolve-data-dir.sh
 ledger_report=$script_dir/ledger-report.sh
-challenge=$script_dir/challenge.sh
 skill=$plugin_dir/skills/orchestration/SKILL.md
 contracts=$plugin_dir/skills/orchestration/references/role-contracts.md
 preflight=$plugin_dir/skills/orchestration/references/preflight.md
@@ -38,7 +37,7 @@ trap cleanup 0 HUP INT TERM
 tmp_dir=$(mktemp -d "$tmp_base/sol-advisor-verify.XXXXXX") || fail "could not create disposable verification directory"
 
 terra_file=sol-advisor-terra-implementer.toml
-consultant_file=sol-advisor-sol-consultant.toml
+consultant_file=sol-advisor-astra-consultant.toml
 sol_file=sol-advisor-sol-reviewer.toml
 reviewer_template=$plugin_dir/agents/sol-advisor-sol-reviewer.toml
 floor_file=sol-advisor-luna-committer.toml
@@ -193,81 +192,16 @@ PREV_SOL_REVIEWER_369073B
   [ "$(shasum -a 256 "$target/$sol_file" | awk '{print $1}')" = "$expected_digest" ] || fail "previous Sol reviewer fixture digest drifted: $fixture"
 }
 
-for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$data_dir_resolver" "$ledger_report" "$challenge" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
+for required in "$installer" "$runtime_inspector" "$script_dir/check-hook-trust.sh" "$data_dir_resolver" "$ledger_report" "$manifest" "$hooks_file" "$review_hook" "$skill" "$contracts" "$preflight" "$readme"; do
   test -f "$required" || fail "required file missing: $required"
 done
-test -x "$challenge" || fail "challenge.sh is not executable"
 
 jq empty "$manifest"
-[ "$(jq -r '.version' "$manifest")" = 0.8.0 ] || fail "manifest version is not 0.8.0"
+[ "$(jq -r '.version' "$manifest")" = 0.9.0 ] || fail "manifest version is not 0.9.0"
 [ "$(jq -r '.hooks' "$manifest")" = ./hooks.json ] || fail "manifest hooks path is not ./hooks.json"
 pass "manifest JSON, version, and hook declaration"
-grep -Fq '"plugin_version": "0.8.0"' "$review_hook" || fail "review-budget.py plugin_version constant does not match manifest 0.8.0"
-pass "manifest, verify assertion, and hook constant agree on 0.8.0"
-
-grep -Fq -- '--strict-mcp-config' "$challenge" || fail "challenge.sh is missing strict MCP configuration"
-grep -Fq -- '--system-prompt' "$challenge" || fail "challenge.sh is missing the system prompt flag"
-grep -Fq -- '--model opus' "$challenge" || fail "challenge.sh is missing the pinned Opus model"
-grep -Fq -- '--output-format json' "$challenge" || fail "challenge.sh is missing JSON output mode"
-grep -Fq 'claude-opus-5' "$challenge" || fail "challenge.sh is missing downgrade detection"
-if grep -Fq 'jq' "$challenge"; then fail "challenge.sh must not depend on jq"; fi
-grep -Fq 'cat "$packet_file" | claude -p' "$challenge" || fail "challenge.sh does not pipe the packet to claude stdin"
-if grep -Eq 'claude -p.*"\$packet_file"([[:space:]]|$)' "$challenge"; then fail "challenge.sh passes the packet as a claude positional argument"; fi
-pass "challenge.sh invocation shape and downgrade detection"
-
-refusal_bin=$tmp_dir/challenge-refusal-bin
-refusal_sentinel=$tmp_dir/challenge-refusal-sentinel
-mkdir "$refusal_bin"
-cat > "$refusal_bin/claude" <<'STUB_CLAUDE'
-#!/bin/sh
-: > "$CHALLENGE_REFUSAL_SENTINEL"
-STUB_CLAUDE
-chmod +x "$refusal_bin/claude"
-if printf '%s\n' 'no trigger line here' | PATH="$refusal_bin:$PATH" CHALLENGE_REFUSAL_SENTINEL="$refusal_sentinel" sh "$challenge"; then
-  fail "challenge.sh accepted a packet with no valid TRIGGER line"
-fi
-test ! -e "$refusal_sentinel" || fail "challenge.sh invoked claude for a packet with no valid TRIGGER line"
-pass "challenge.sh refuses a packet with no valid TRIGGER line before invoking claude"
-
-downgrade_bin=$tmp_dir/challenge-downgrade-bin
-downgrade_home=$tmp_dir/challenge-downgrade-home
-downgrade_stderr=$tmp_dir/challenge-downgrade-stderr
-opus_home=$tmp_dir/challenge-opus-home
-opus_stderr=$tmp_dir/challenge-opus-stderr
-mkdir "$downgrade_bin"
-cat > "$downgrade_bin/claude" <<'STUB_CLAUDE'
-#!/bin/sh
-case "${CHALLENGE_MODEL_MODE:-sonnet}" in
-  opus)
-    printf '%s\n' '{"result":"opus challenger reply","modelUsage":{"claude-opus-5":{"inputTokens":1}},"total_cost_usd":0}'
-    ;;
-  *)
-    printf '%s\n' '{"result":"degraded challenger reply","modelUsage":{"claude-sonnet-5":{"inputTokens":1}},"total_cost_usd":0}'
-    ;;
-esac
-STUB_CLAUDE
-chmod +x "$downgrade_bin/claude"
-if ! degraded_reply=$(printf '%s\n' 'TRIGGER: deadlock' | PATH="$downgrade_bin:$PATH" CODEX_HOME="$downgrade_home" CHALLENGE_MODEL_MODE=sonnet sh "$challenge" 2>"$downgrade_stderr"); then
-  fail "challenge.sh rejected a valid degraded stub response"
-fi
-[ "$degraded_reply" = "degraded challenger reply" ] || fail "degraded stub reply was not preserved on stdout"
-grep -Fq 'CHALLENGER DEGRADED: claude-sonnet-5' "$downgrade_stderr" || fail "degraded stub response did not report CHALLENGER DEGRADED"
-grep -Fq '"degraded":true' "$downgrade_home/sol-advisor/challenger.jsonl" || fail "degraded ledger record did not set degraded=true"
-grep -Fq '"outcome":"degraded"' "$downgrade_home/sol-advisor/challenger.jsonl" || fail "degraded ledger record did not set outcome=degraded"
-if ! opus_reply=$(printf '%s\n' 'TRIGGER: deadlock' | PATH="$downgrade_bin:$PATH" CODEX_HOME="$opus_home" CHALLENGE_MODEL_MODE=opus sh "$challenge" 2>"$opus_stderr"); then
-  fail "challenge.sh rejected a valid Opus stub response"
-fi
-[ "$opus_reply" = "opus challenger reply" ] || fail "Opus stub reply was not preserved on stdout"
-if grep -Fq 'CHALLENGER DEGRADED' "$opus_stderr"; then fail "Opus stub response was incorrectly marked degraded"; fi
-grep -Fq '"degraded":false' "$opus_home/sol-advisor/challenger.jsonl" || fail "Opus ledger record did not set degraded=false"
-grep -Fq '"outcome":"ok"' "$opus_home/sol-advisor/challenger.jsonl" || fail "Opus ledger record did not set outcome=ok"
-pass "challenge.sh detects degraded model metadata and records both outcomes"
-
-for trigger in deadlock irreversible user-request; do
-  grep -Fq "$trigger" "$skill" || fail "$skill is missing Challenger trigger: $trigger"
-  grep -Fq "$trigger" "$contracts" || fail "$contracts is missing Challenger trigger: $trigger"
-done
-pass "SKILL.md and role-contracts.md document all three Challenger triggers"
+grep -Fq '"plugin_version": "0.9.0"' "$review_hook" || fail "review-budget.py plugin_version constant does not match manifest 0.9.0"
+pass "manifest, verify assertion, and hook constant agree on 0.9.0"
 
 jq empty "$hooks_file"
 jq -e '
@@ -293,7 +227,7 @@ if ! hook_output=$(run_review_hook "$exec_payload"); then fail "exec payload did
 [ -z "$hook_output" ] || fail "exec payload produced stdout"
 test ! -e "$hook_ledger" || fail "exec payload created the review ledger"
 
-implementer_payload='{"hook_event_name":"PreToolUse","tool_name":"collaboration.spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_terra_implementer","message":"REVIEW CYCLE"}}'
+implementer_payload='{"hook_event_name":"PreToolUse","tool_name":"collaboration.spawn_agent","session_id":"budget-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_worker","message":"REVIEW CYCLE"}}'
 if ! hook_output=$(run_review_hook "$implementer_payload"); then fail "implementer payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "implementer payload produced stdout"
 test ! -e "$hook_ledger" || fail "implementer payload created the review ledger"
@@ -316,7 +250,7 @@ jq -s -e '
   and (.[0].agent_type == "sol_advisor_sol_reviewer")
 ' "$hook_ledger" >/dev/null || fail "marked consult was not recorded as an uncounted consult"
 
-# The distinct sol_advisor_sol_consultant agent type is auditable and untested until
+# The distinct sol_advisor_astra_consultant agent type is auditable and untested until
 # now: it must be recorded as an uncounted consult with no marker required, must never
 # consume a review cycle, and must never be denied -- including after the budget for
 # sol_advisor_sol_reviewer is exhausted. Use an isolated session and ledger so these
@@ -327,25 +261,32 @@ run_consultant_hook() {
   printf '%s' "$1" | PLUGIN_DATA="$consultant_data" python3 "$review_hook"
 }
 
-consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"consultant-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_consultant","message":"Pre-implementation consult, no marker required."}}'
-if ! hook_output=$(run_consultant_hook "$consultant_payload"); then fail "sol_advisor_sol_consultant payload did not fail open"; fi
-[ -z "$hook_output" ] || fail "sol_advisor_sol_consultant payload produced stdout"
+consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"consultant-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_astra_consultant","message":"Pre-implementation consult, no marker required."}}'
+if ! hook_output=$(run_consultant_hook "$consultant_payload"); then fail "sol_advisor_astra_consultant payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "sol_advisor_astra_consultant payload produced stdout"
 jq -s -e '
   length == 1
   and (.[0].event == "consult")
   and (.[0].session_id == "consultant-session")
   and (.[0].used == 0)
   and (.[0].cycle == null)
-  and (.[0].agent_type == "sol_advisor_sol_consultant")
-' "$consultant_ledger" >/dev/null || fail "unmarked sol_advisor_sol_consultant spawn was not recorded as an uncounted consult"
-pass "unmarked sol_advisor_sol_consultant spawn is recorded as an uncounted consult"
+  and (.[0].agent_type == "sol_advisor_astra_consultant")
+' "$consultant_ledger" >/dev/null || fail "unmarked sol_advisor_astra_consultant spawn was not recorded as an uncounted consult"
+pass "unmarked sol_advisor_astra_consultant spawn is recorded as an uncounted consult"
+legacy_consultant_data=$tmp_dir/hook-legacy-consultant
+legacy_consultant_ledger=$legacy_consultant_data/review-budget.jsonl
+legacy_consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"legacy-consultant-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_consultant","message":"Legacy session consult."}}'
+if ! hook_output=$(printf '%s' "$legacy_consultant_payload" | PLUGIN_DATA="$legacy_consultant_data" python3 "$review_hook"); then fail "legacy consultant payload did not fail open"; fi
+[ -z "$hook_output" ] || fail "legacy consultant payload produced stdout"
+jq -s -e 'length == 1 and .[0].agent_type == "sol_advisor_sol_consultant" and .[0].event == "consult"' "$legacy_consultant_ledger" >/dev/null || fail "legacy consultant agent type was not recorded as an uncounted consult"
+pass "legacy Sol consultant spawns remain recognized as uncounted consults"
 
 exempt_paths_data=$tmp_dir/hook-exempt-paths
 exempt_paths_ledger=$exempt_paths_data/review-budget.jsonl
 run_exempt_paths_hook() {
   printf '%s' "$1" | PLUGIN_DATA="$exempt_paths_data" python3 "$review_hook"
 }
-exempt_paths_consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"exempt-paths-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_consultant","message":"Routine consultation."}}'
+exempt_paths_consultant_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"exempt-paths-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_astra_consultant","message":"Routine consultation."}}'
 exempt_paths_reviewer_payload='{"hook_event_name":"PreToolUse","tool_name":"spawn_agent","session_id":"exempt-paths-session","cwd":"/fixture","tool_input":{"agent_type":"sol_advisor_sol_reviewer","message":"COMMITMENT BOUNDARY\nLegacy consultation marker."}}'
 if ! hook_output=$(run_exempt_paths_hook "$exempt_paths_consultant_payload"); then fail "consultant exempt-path payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "consultant exempt-path payload produced stdout"
@@ -354,7 +295,7 @@ if ! hook_output=$(run_exempt_paths_hook "$exempt_paths_reviewer_payload"); then
 jq -s -e '
   length == 2
   and (map(.event) == ["consult", "consult"])
-  and (.[0].agent_type == "sol_advisor_sol_consultant")
+  and (.[0].agent_type == "sol_advisor_astra_consultant")
   and (.[1].agent_type == "sol_advisor_sol_reviewer")
   and (.[0].agent_type != .[1].agent_type)
 ' "$exempt_paths_ledger" >/dev/null || fail "exempt consultant and reviewer records were not distinguishable"
@@ -386,8 +327,8 @@ jq -s -e '
   and (map(select(.event == "consult")) | length) == 5
   and (map(select(.event == "consult")) | map(.used) == [0, 1, 2, 3, 3])
   and (map(.session_id) | unique == ["consultant-session"])
-' "$consultant_ledger" >/dev/null || fail "interleaved sol_advisor_sol_consultant spawns altered the reviewer budget, ordering, or denial behavior"
-pass "interleaved sol_advisor_sol_consultant spawns never consume the reviewer budget and are never denied, even after exhaustion"
+' "$consultant_ledger" >/dev/null || fail "interleaved sol_advisor_astra_consultant spawns altered the reviewer budget, ordering, or denial behavior"
+pass "interleaved sol_advisor_astra_consultant spawns never consume the reviewer budget and are never denied, even after exhaustion"
 
 # The host may namespace its tool name or omit it entirely. Reviewer identity comes
 # from the exact agent type, while other agent types remain ignored.
@@ -490,12 +431,13 @@ printf '%s\n' \
   '{"event":"review","session_id":"s","cycle":2}' \
   '{"event":"review","session_id":"s","cycle":3}' \
   '{"event":"denied","session_id":"s","cycle":4}' \
+  '{"event":"consult","session_id":"s","agent_type":"sol_advisor_astra_consultant","used":3}' \
   '{"event":"consult","session_id":"s","agent_type":"sol_advisor_sol_consultant","used":3}' \
   '{"event":"denied","session_id":"s","cycle":4}' \
   '{"event":"consult","session_id":"s","agent_type":"sol_advisor_sol_reviewer","used":3}' \
   > "$bypass_interleaved_data/review-budget.jsonl"
 if ! bypass_interleaved_output=$(sh "$ledger_report" --data-dir "$bypass_interleaved_data"); then fail "ledger report rejected the interleaved bypass fixture"; fi
-printf '%s\n' "$bypass_interleaved_output" | grep -Fq 'Consult records: 2 (consultant=1, marker-exempt reviewer=1, legacy without agent_type=0, unknown agent_type=0)' || fail "ledger report did not distinguish routine consultant and reviewer consults"
+printf '%s\n' "$bypass_interleaved_output" | grep -Fq 'Consult records: 3 (consultant=2, marker-exempt reviewer=1, legacy without agent_type=0, unknown agent_type=0)' || fail "ledger report did not distinguish routine consultant and reviewer consults"
 printf '%s\n' "$bypass_interleaved_output" | grep -Fq 'Bypass signatures after a denial (reset or marker-exempt reviewer consult): 1 (reset=0, reviewer-consult=1)' || fail "ledger report counted a routine consultant as a bypass"
 pass "only marker-exempt reviewer consults after denial are bypass signatures"
 
@@ -561,7 +503,6 @@ liveness_status=$liveness_data/hook-status.json
 if grep -q '<<' "$script_dir/check-hook-trust.sh"; then fail "check-hook-trust.sh uses a here-document, which needs a temp file and fails in a read-only sandbox"; fi
 if grep -q '<<' "$data_dir_resolver"; then fail "resolve-data-dir.sh uses a here-document"; fi
 if grep -q '<<' "$ledger_report"; then fail "ledger-report.sh uses a here-document"; fi
-if grep -q '<<' "$challenge"; then fail "challenge.sh uses a here-document"; fi
 liveness_payload='{"hook_event_name":"PreToolUse","tool_name":"exec","session_id":"liveness-session","cwd":"/fixture","tool_input":{}}'
 if ! hook_output=$(printf '%s' "$liveness_payload" | PLUGIN_DATA="$liveness_data" python3 "$review_hook"); then fail "liveness payload did not fail open"; fi
 [ -z "$hook_output" ] || fail "liveness payload produced stdout"
@@ -726,7 +667,7 @@ pass "hook liveness, derived data resolution, precedence, read-only behavior, an
 
 routing_codex_home=$tmp_dir/routing-codex-home
 routing_ledger=$routing_codex_home/sol-advisor/routing.jsonl
-routing_record='{"ts":"2026-08-05T10:00:00+09:00","task":"fixture","class":"implement","lane":"sol_advisor_terra_implementer","exception":null,"outcome":"success","attempts":1,"duration_s":1,"note":""}'
+routing_record='{"ts":"2026-08-05T10:00:00+09:00","task":"fixture","class":"implement","lane":"sol_advisor_sol_worker","exception":null,"outcome":"success","attempts":1,"duration_s":1,"note":""}'
 if ! env -u PLUGIN_DATA -u CLAUDE_PLUGIN_DATA CODEX_HOME="$routing_codex_home" sh -c '
   mkdir -p "${CODEX_HOME:-$HOME/.codex}/sol-advisor"
   printf "%s\\n" "$1" >> "${CODEX_HOME:-$HOME/.codex}/sol-advisor/routing.jsonl"
@@ -738,51 +679,29 @@ pass "routing-ledger first-use sequence creates its parent and writes one record
 python3 - "$templates" <<'PY'
 from pathlib import Path
 import sys, tomllib
-
-root = Path(sys.argv[1])
-expected = {
-    "sol-advisor-luna-implementer.toml": {
-        "name": "sol_advisor_luna_implementer",
-        "model": "gpt-5.6-luna",
-        "model_reasoning_effort": "max",
-    },
-    "sol-advisor-sol-reviewer.toml": {
-        "name": "sol_advisor_sol_reviewer",
-        "model": "gpt-5.6-terra",
-        "model_reasoning_effort": "high",
-        "sandbox_mode": "read-only",
-    },
-    "sol-advisor-luna-committer.toml": {
-        "name": "sol_advisor_luna_committer",
-        "model": "gpt-5.6-luna",
-        "model_reasoning_effort": "medium",
-    },
-    "sol-advisor-sol-consultant.toml": {
-        "name": "sol_advisor_sol_consultant",
-        "model": "gpt-5.6-sol",
-        "model_reasoning_effort": "medium",
-        "sandbox_mode": "read-only",
-    },
-}
-actual = {path.name for path in root.glob("*.toml")}
-if actual != set(expected):
-    raise SystemExit(f"expected exactly {sorted(expected)}, found {sorted(actual)}")
-for filename, pins in expected.items():
-    data = tomllib.loads((root / filename).read_text(encoding="utf-8"))
-    for field in ("name", "description", "developer_instructions"):
-        if not isinstance(data.get(field), str) or not data[field].strip():
-            raise SystemExit(f"{filename}: missing {field}")
-    for field, value in pins.items():
-        if data.get(field) != value:
-            raise SystemExit(f"{filename}: {field}={data.get(field)!r}, expected {value!r}")
-print("four exact role pins are valid")
+root=Path(sys.argv[1])
+expected={
+"sol-advisor-luna-committer.toml":("sol_advisor_luna_committer","gpt-6-luna","low",None),
+"sol-advisor-luna-implementer.toml":("sol_advisor_luna_implementer","gpt-6-luna","high",None),
+"sol-advisor-luna-deep.toml":("sol_advisor_luna_deep","gpt-6-luna","max",None),
+"sol-advisor-sol-worker.toml":("sol_advisor_sol_worker","gpt-6.1-sol","medium",None),
+"sol-advisor-sol-reviewer.toml":("sol_advisor_sol_reviewer","gpt-6.1-sol","medium","read-only"),
+"sol-advisor-astra-consultant.toml":("sol_advisor_astra_consultant","gpt-6-astra","high","read-only"),}
+if {p.name for p in root.glob("*.toml")} != set(expected): raise SystemExit("template inventory differs")
+for fn,(name,model,effort,sandbox) in expected.items():
+ d=tomllib.loads((root/fn).read_text())
+ if (d.get("name"),d.get("model"),d.get("model_reasoning_effort")) != (name,model,effort): raise SystemExit(f"{fn}: role pin mismatch")
+ if d.get("sandbox_mode") != sandbox: raise SystemExit(f"{fn}: sandbox mismatch")
+ if "You are a leaf worker. Never spawn or delegate to another agent" not in d.get("developer_instructions",""): raise SystemExit(f"{fn}: missing leaf guard")
+print("six exact role pins and leaf-worker guards are valid")
 PY
-pass "exact four-role TOML inventory"
+pass "exact six-role TOML inventory and leaf-worker guards"
+if grep -rn -e gpt-5.6 -e "claude -p" -e challenge.sh "$templates" "$plugin_dir/hooks" "$script_dir" "$plugin_dir/.codex-plugin" --exclude=verify.sh >/dev/null; then fail "retired runtime reference remains"; fi
+pass "runtime has no retired model or Claude Challenger reference"
 
-grep -Fq 'Scarcity here is ordered' "$skill" || fail "skill is missing ordered scarcity"
-grep -Fq 'Codex tokens. The abundant resource.' "$skill" || fail "skill is missing abundant Codex token doctrine"
-obsolete_scarcity_word=scarcest
-if grep -Fq "$obsolete_scarcity_word resource" "$skill"; then fail "skill retains obsolete scarcity claim"; fi
+grep -Fq "primary session's context is the scarce resource" "$skill" || fail "skill is missing primary-context scarcity"
+grep -Fq 'Codex tokens are abundant' "$skill" || fail "skill is missing abundant Codex token doctrine"
+grep -Fq 'Terminating beats one more finding' "$skill" || fail "skill is missing termination rule"
 for document in "$skill" "$contracts" "$reviewer_template"; do
   grep -Fq 'Scope inflation is a defect' "$document" || fail "scope-inflation rule is missing in $document"
 done
@@ -790,14 +709,20 @@ grep -Fq 'Cycle 1 already defined the complete finding set.' "$contracts" || fai
 grep -Fq 'Stay under 300 words' "$contracts" || fail "reviewer word limit is missing"
 pass "ordered scarcity, scope discipline, and bounded reviewer contract"
 
-grep -Fq "legacy_terra_sha256=$legacy_terra_sha256" "$installer" || fail "installer legacy Terra digest mismatch"
-grep -Fq "legacy_luna_sha256=$legacy_luna_sha256" "$installer" || fail "installer legacy Luna digest mismatch"
-grep -Fq "prev_sol_sha256='$prev_sol_sha256'" "$installer" || fail "installer previous Sol digest set mismatch"
-pass "immutable v0.2.0 migration fingerprints"
-grep -Fq "consultant_file=$consultant_file" "$installer" || fail "installer current consultant filename mismatch"
-grep -Fq 'consultant_template=$template_dir/$consultant_file' "$installer" || fail "installer is missing the current consultant template path"
-grep -Fq 'consultant_destination=$target_dir/$consultant_file' "$installer" || fail "installer is missing the current consultant destination path"
-pass "current Sol consultant template constants"
+grep -Fq "$legacy_terra_sha256" "$installer" || fail "installer legacy Terra digest mismatch"
+grep -Fq "81a7cd5d89e844f87626e2da7b25a3287bfcf2ee6b25f71f3c388fbb06e292d5" "$installer" || fail "installer committer history digest missing"
+grep -Fq "e00fd54691d013b9932be714476c141e848951a1c33e9a276ab0d4cd103bba60" "$installer" || fail "installer implementer history digest missing"
+grep -Fq "680e33c764c394f3a5311103335ed89b634a0561978eb8836ad2c5f22a690919" "$installer" || fail "installer reviewer history digest missing"
+pass "installer migration fingerprints"
+installer_help=$(sh "$installer" --help) || fail "installer --help failed"
+printf '%s\n' "$installer_help" | grep -Fq 'six current custom-agent templates' || fail "installer help does not describe six current custom-agent templates"
+if printf '%s\n' "$installer_help" | grep -Fq 'four current custom-agent templates'; then fail "installer help retains stale four-template wording"; fi
+shebang_count=$(awk '$0 == "#!/bin/sh" { count++ } END { print count + 0 }' "$installer")
+[ "$shebang_count" -eq 1 ] || fail "installer must contain exactly one /bin/sh shebang"
+duplicate_functions=$(awk '/^[a-z_][a-z_0-9]*[(][)][[:space:]]*[{]/ { name=$0; sub(/[(].*/, "", name); count[name]++; if (count[name] > 1) print name }' "$installer")
+[ -z "$duplicate_functions" ] || fail "installer defines functions more than once: $duplicate_functions"
+pass "installer help and unique definitions"
+pass "installer six-template inventory"
 
 clean_target=$tmp_dir/clean
 sh "$installer" --target-dir "$clean_target"
@@ -855,6 +780,22 @@ if sh "$installer" --target-dir "$consultant_target" --check; then fail "--check
 after=$(snapshot_files "$consultant_target")
 [ "$before" = "$after" ] || fail "--check mutated a modified Sol consultant target"
 pass "Sol consultant current-template round trip: install, ALREADY CURRENT, missing-then-reinstalled, and modified refusal"
+
+legacy_080=$tmp_dir/legacy-080
+mkdir -p "$legacy_080"
+for old_file in sol-advisor-luna-committer.toml sol-advisor-luna-implementer.toml sol-advisor-sol-reviewer.toml sol-advisor-sol-consultant.toml; do
+  git -C "$repo_dir" show "359f72c:plugins/sol-advisor/agents/$old_file" > "$legacy_080/$old_file"
+done
+sh "$installer" --target-dir "$legacy_080"
+[ "$(find "$legacy_080" -maxdepth 1 -name '*.toml' | wc -l | tr -d ' ')" = 6 ] || fail "0.8.0 migration did not leave six templates"
+test ! -e "$legacy_080/sol-advisor-sol-consultant.toml" || fail "old consultant was not removed"
+sh "$installer" --target-dir "$legacy_080" --check
+modified_retired=$tmp_dir/modified-retired
+mkdir -p "$modified_retired"
+printf '%s\n' modified > "$modified_retired/sol-advisor-sol-consultant.toml"
+if sh "$installer" --target-dir "$modified_retired"; then fail "modified old consultant was accepted"; fi
+test -e "$modified_retired/sol-advisor-sol-consultant.toml" || fail "modified old consultant was removed"
+pass "exact 0.8.0 migration and modified retired consultant refusal"
 
 migration_target=$tmp_dir/migration
 write_legacy_roles "$migration_target"
@@ -923,12 +864,12 @@ runtime_rollout=$runtime_day/rollout-2026-08-02T00-00-00-$runtime_id.jsonl
 printf '%s\n' \
   '{"type":"response_item","payload":{"prompt":"DO_NOT_LEAK_PROMPT"}}' \
   "{\"type\":\"session_meta\",\"payload\":{\"id\":\"$runtime_id\",\"parent_thread_id\":\"00000000-0000-7000-8000-000000000000\",\"agent_role\":\"sol_advisor_luna_implementer\",\"agent_path\":\"/root/fixture\",\"model_provider\":\"openai\",\"cwd\":\"/fixture\"}}" \
-  '{"type":"turn_context","payload":{"model":"gpt-5.6-luna","effort":"max","sandbox_policy":{"type":"danger-full-access"},"permission_profile":{"type":"disabled"},"cwd":"/fixture"}}' \
+  '{"type":"turn_context","payload":{"model":"gpt-6-luna","effort":"max","sandbox_policy":{"type":"danger-full-access"},"permission_profile":{"type":"disabled"},"cwd":"/fixture"}}' \
   > "$runtime_rollout"
 runtime_output=$(sh "$runtime_inspector" --sessions-dir "$runtime_sessions" "$runtime_id")
 printf '%s\n' "$runtime_output" | jq -e --arg id "$runtime_id" '
   .thread_id == $id and .agent_role == "sol_advisor_luna_implementer"
-  and .model == "gpt-5.6-luna" and .effort == "max"
+  and .model == "gpt-6-luna" and .effort == "max"
   and .sandbox_policy_type == "danger-full-access"
   and .permission_profile_type == "disabled"
 ' >/dev/null || fail "runtime inspector returned wrong Luna/Max evidence"
@@ -939,20 +880,24 @@ if sh "$runtime_inspector" --sessions-dir "$runtime_sessions" "$zero_id" >/dev/n
 pass "runtime inspector Luna/Max routing and safe refusal"
 
 for document in "$skill" "$contracts"; do
-  grep -Fq 'agent_type: sol_advisor_luna_implementer' "$document" || fail "missing Implementer spawn in $document"
-  grep -Fq 'agent_type: sol_advisor_sol_reviewer' "$document" || fail "missing Sol spawn in $document"
-  grep -Fq 'agent_type: sol_advisor_luna_committer' "$document" || fail "missing floor-lane spawn in $document"
   grep -Fq 'fork_turns: none' "$document" || fail "missing fresh context in $document"
-  if grep -Eq 'agent_type:.*terra_implementer' "$document"; then fail "retired Terra implementer spawn remains in $document"; fi
   if grep -Eq '^[[:space:]]*(model|reasoning_effort):' "$document"; then fail "per-spawn override remains in $document"; fi
+done
+for role in sol_advisor_luna_committer sol_advisor_luna_implementer sol_advisor_luna_deep sol_advisor_sol_worker sol_advisor_sol_reviewer sol_advisor_astra_consultant; do
+  grep -Fq "$role" "$preflight" || fail "preflight is missing required role: $role"
+  grep -Fq "agent_type: $role" "$skill" || fail "skill is missing role spawn: $role"
 done
 grep -Fq '../../scripts/install-agents.sh' "$preflight" || fail "preflight does not resolve installer relatively"
 grep -Fq '../../scripts/inspect-agent-runtime.sh' "$preflight" || fail "preflight does not resolve inspector relatively"
 grep -Fqi 'public native spawn/details metadata first' "$preflight" || fail "preflight lacks public-details-first evidence rule"
-grep -Fqi 'parent captures and verifies exact before-and-after' "$contracts" || fail "contracts lack behavioral read-only state check"
+grep -Fq 'SILENCE GAP' "$contracts" || fail "reviewer packet lacks silence-gap list"
+for document in "$skill" "$contracts" "$preflight" "$plugin_dir/skills/orchestration/agents/openai.yaml"; do
+  if grep -Eq 'Challenger|challenge\.sh|Opus|Terra|gpt-5\.6' "$document" || grep -Eqi 'claude' "$document"; then fail "retired lane wording remains in $document"; fi
+done
+readme_without_release=$(sed '/^## 0\.9\.0$/,$d' "$readme")
+if printf '%s\n' "$readme_without_release" | grep -Eq 'Challenger|challenge\.sh|Opus|Terra|gpt-5\.6' || printf '%s\n' "$readme_without_release" | grep -Eqi 'claude'; then fail "README mentions retired lanes outside the 0.9.0 section"; fi
 if rg --glob '!**/scripts/verify.sh' --glob '!**/scripts/install-agents.sh' -n 'sol_advisor_terra_implementer|sol-advisor-terra-implementer' "$readme" "$plugin_dir" | grep -Eqv 'legacy|retired'; then fail "unreferred Terra implementer remains in docs"; fi
-pass "three-lane documentation and no per-spawn overrides"
-
+pass "six-role documentation, pinned-lane routing, and retired wording absence"
 grep -Fq 'COMMITMENT BOUNDARY' "$review_hook" || fail "hook no longer recognizes the consult exemption marker"
 if grep -Fq 'REVIEW CYCLE' "$review_hook"; then fail "hook still gates the budget on a marker the final review must remember"; fi
 for document in "$skill" "$contracts" "$readme"; do
@@ -961,21 +906,13 @@ done
 grep -Fq 'routing.jsonl' "$skill" || fail "skill is missing the routing ledger"
 grep -Fq 'sol-advisor/routing.jsonl' "$readme" || fail "README does not point at the routing ledger"
 if grep -Fq 'Resets outnumber deliverables' "$ledger_report"; then fail "ledger report retains the unreachable reset comparison"; fi
-pass "inverted marker contract and routing ledger documentation"
-grep -Fq 'sol_advisor_luna_committer' "$preflight" || fail "preflight is missing sol_advisor_luna_committer"
-for role in sol_advisor_luna_implementer sol_advisor_sol_reviewer sol_advisor_luna_committer; do
-  grep -Fq "$role" "$preflight" || fail "preflight is missing required role: $role"
-done
-if grep -Fq 'The two role files' "$preflight"; then fail "preflight retains retired two-lane role-file wording"; fi
-pass "preflight three required role names and retired two-lane wording absence"
-
+pass "consult marker, review budget, and routing ledger documentation"
 sh -n "$installer"
 sh -n "$runtime_inspector"
 sh -n "$script_dir/check-hook-trust.sh"
 sh -n "$data_dir_resolver"
 sh -n "$ledger_report"
-sh -n "$challenge"
 sh -n "$script_dir/verify.sh"
 pass "shell syntax"
 
-printf '%s\n' "VERIFY PASSED: Sol Advisor four-role migration checks completed in $tmp_dir"
+printf '%s\n' "VERIFY PASSED: Sol Advisor 0.9.0 documentation and runtime checks completed in $tmp_dir"
